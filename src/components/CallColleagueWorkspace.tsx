@@ -120,33 +120,215 @@ const ENV_API_BASE_URL =
 const ENV_STREAM_WSS_URL =
   process.env.NEXT_PUBLIC_CODOS_STREAM_WSS_URL ||
   "wss://stream.viacodos.com/v1";
-const ENV_CC_KEY_PREFIX =
-  process.env.NEXT_PUBLIC_CALL_COLLEAGUE_KEY_PREFIX || "cc_env_voice";
 const ENV_CC_WEBHOOK_URL =
   process.env.NEXT_PUBLIC_CALL_COLLEAGUE_WEBHOOK_URL ||
   "https://api.viacodos.com/v1/webhooks/voice-events";
 
+const CODE_KEYWORDS = new Set([
+  "import",
+  "from",
+  "const",
+  "let",
+  "var",
+  "new",
+  "async",
+  "function",
+  "await",
+  "return",
+  "package",
+  "func",
+  "curl",
+  "POST",
+  "GET",
+  "true",
+  "false",
+]);
+
+const CODE_FUNCTIONS_AND_TYPES = new Set([
+  "CodosVoiceClient",
+  "CallColleagueClient",
+  "NewColleagueClient",
+  "DispatchRequest",
+  "dispatch",
+  "Dispatch",
+  "log",
+  "print",
+  "Println",
+  "getenv",
+  "Getenv",
+  "Background",
+  "main",
+]);
+
+const CODE_PROPERTIES = new Set([
+  "apiKey",
+  "api_key",
+  "colleagueId",
+  "colleague_id",
+  "ColleagueID",
+  "scopes",
+  "recipientPhone",
+  "recipient_phone",
+  "RecipientPhone",
+  "bargeInSensitivityMs",
+  "barge_in_ms",
+  "speakingRate",
+  "speaking_rate",
+  "webhookUrl",
+  "webhook_url",
+  "WebhookURL",
+  "CALL_COLLEAGUE_API_KEY",
+  "sessionId",
+  "SessionID",
+  "edgeLatencyMs",
+  "calls",
+  "process",
+  "env",
+  "os",
+  "context",
+  "fmt",
+  "voice",
+]);
+
+function highlightCodeSegment(
+  segment: string,
+  keyPrefix: string
+): React.ReactNode[] {
+  const tokenRegex =
+    /("[^"]*"|'[^']*'|https?:\/\/[^\s"\\]+|-[XHd]\b|\b\d+(?:\.\d+)?\b|\b[A-Za-z_][A-Za-z0-9_]*\b|[^\s"A-Za-z0-9_]+|\s+)/g;
+  const parts = segment.match(tokenRegex) || [segment];
+
+  return parts.map((token, idx) => {
+    const key = `${keyPrefix}-${idx}`;
+    if (
+      (token.startsWith('"') && token.endsWith('"')) ||
+      (token.startsWith("'") && token.endsWith("'")) ||
+      token.startsWith("http://") ||
+      token.startsWith("https://")
+    ) {
+      return (
+        <span key={key} className="tok-string">
+          {token}
+        </span>
+      );
+    }
+    if (
+      token === "-X" ||
+      token === "-H" ||
+      token === "-d" ||
+      CODE_KEYWORDS.has(token)
+    ) {
+      return (
+        <span key={key} className="tok-keyword">
+          {token}
+        </span>
+      );
+    }
+    if (CODE_FUNCTIONS_AND_TYPES.has(token)) {
+      return (
+        <span key={key} className="tok-fn">
+          {token}
+        </span>
+      );
+    }
+    if (CODE_PROPERTIES.has(token)) {
+      return (
+        <span key={key} className="tok-prop">
+          {token}
+        </span>
+      );
+    }
+    if (/^\d+(\.\d+)?$/.test(token)) {
+      return (
+        <span key={key} className="tok-num">
+          {token}
+        </span>
+      );
+    }
+    if (/^[A-Za-z_]/.test(token)) {
+      return (
+        <span key={key} className="tok-var">
+          {token}
+        </span>
+      );
+    }
+    if (/^\s+$/.test(token)) {
+      return token;
+    }
+    return (
+      <span key={key} className="tok-punct">
+        {token}
+      </span>
+    );
+  });
+}
+
+function renderHighlightedCode(code: string): React.ReactNode {
+  const lines = code.split("\n");
+  return lines.map((line, lineIdx) => {
+    const trimmed = line.trimStart();
+    let codePart = line;
+    let commentPart = "";
+
+    if (trimmed.startsWith("//") || trimmed.startsWith("#")) {
+      const commentStart = line.indexOf(trimmed[0]);
+      codePart = line.slice(0, commentStart);
+      commentPart = line.slice(commentStart);
+    } else {
+      const inlineSlash = line.indexOf(" //");
+      if (inlineSlash !== -1) {
+        codePart = line.slice(0, inlineSlash);
+        commentPart = line.slice(inlineSlash);
+      }
+    }
+
+    return (
+      <div
+        key={lineIdx}
+        className="flex items-baseline hover:bg-[#14B8A6]/[0.06] px-1 rounded transition-colors min-h-[20px]"
+      >
+        <span className="pr-3.5 select-none text-right text-[10px] opacity-40 font-mono w-7 shrink-0">
+          {String(lineIdx + 1).padStart(2, "0")}
+        </span>
+        <span className="whitespace-pre font-mono">
+          {codePart ? highlightCodeSegment(codePart, `cc-${lineIdx}`) : null}
+          {commentPart ? (
+            <span className="tok-comment">{commentPart}</span>
+          ) : null}
+          {line.length === 0 ? " " : null}
+        </span>
+      </div>
+    );
+  });
+}
+
+/**
+ * Masks an API key so only the first couple of characters are visible
+ * and the remaining characters are shown as asterisks (*).
+ */
+const maskApiKey = (fullKey: string): string => {
+  const visiblePrefix = fullKey.slice(0, 3);
+  const starCount = Math.max(10, fullKey.length - 3);
+  return `${visiblePrefix}${"*".repeat(starCount)}`;
+};
+
 const INITIAL_COLLEAGUE_KEYS: ColleagueApiKey[] = [
   {
     id: "cc_key_1",
-    name: "Inbound Reception SIP & Dispatch Key",
+    name: "API Key 1 — Inbound Reception SIP & Dispatch",
     colleagueId: "col_inbound_01",
     colleagueName: "Colleague #01 - Inbound Reception",
-    keySecret:
-      process.env.NEXT_PUBLIC_CALL_COLLEAGUE_PRIMARY_KEY ||
-      "$NEXT_PUBLIC_CALL_COLLEAGUE_PRIMARY_KEY",
+    keySecret: "API KEY 1",
     scopes: ["voice:outbound-dispatch", "voice:inbound-sip", "voice:webrtc-stream"],
     webhookUrl: ENV_CC_WEBHOOK_URL,
     created: "Loaded from .env • Primary",
   },
   {
     id: "cc_key_2",
-    name: "VIP Incident Escalation Trigger Key",
+    name: "API Key 2 — VIP Incident Escalation Trigger",
     colleagueId: "col_vip_02",
     colleagueName: "Colleague #02 - VIP Incident Response",
-    keySecret:
-      process.env.NEXT_PUBLIC_CALL_COLLEAGUE_VIP_KEY ||
-      "$NEXT_PUBLIC_CALL_COLLEAGUE_VIP_KEY",
+    keySecret: "API KEY 2",
     scopes: ["voice:outbound-dispatch", "voice:live-transfer"],
     webhookUrl:
       process.env.NEXT_PUBLIC_CALL_COLLEAGUE_VIP_WEBHOOK_URL ||
@@ -345,18 +527,17 @@ export const CallColleagueWorkspace: React.FC<CallColleagueWorkspaceProps> = ({
     e.preventDefault();
     const targetColleague =
       colleagues.find((c) => c.id === selectedApiColleagueId) || colleagues[0];
-    const randomHex = Array.from({ length: 16 }, () =>
-      Math.floor(Math.random() * 16).toString(16)
-    ).join("");
-    const generatedSecret = `${ENV_CC_KEY_PREFIX}_${randomHex}`;
+    const nextKeyNumber = colleagueApiKeys.length + 1;
+    const generatedFullKey = `API KEY ${nextKeyNumber}`;
 
     const newKeyEntry: ColleagueApiKey = {
       id: `cc_key_${Date.now()}`,
       name:
-        newApiKeyName.trim() || `${targetColleague.name} Production Key`,
+        newApiKeyName.trim() ||
+        `API Key ${nextKeyNumber} — ${targetColleague.name}`,
       colleagueId: targetColleague.id,
       colleagueName: targetColleague.name,
-      keySecret: generatedSecret,
+      keySecret: generatedFullKey,
       scopes:
         selectedScopes.length > 0
           ? selectedScopes
@@ -367,7 +548,7 @@ export const CallColleagueWorkspace: React.FC<CallColleagueWorkspaceProps> = ({
     };
 
     setColleagueApiKeys((prev) => [newKeyEntry, ...prev]);
-    setLastGeneratedKey(generatedSecret);
+    setLastGeneratedKey(generatedFullKey);
   };
 
   const activeApiColleague =
@@ -1177,7 +1358,7 @@ func main() {
 
                       <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/40 border border-[#F1F5F9]/10 font-mono text-xs">
                         <span className="text-[#14B8A6] truncate">
-                          {item.keySecret}
+                          {maskApiKey(item.keySecret)}
                         </span>
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
@@ -1190,7 +1371,7 @@ func main() {
                             {copiedTextId === item.id ? (
                               <>
                                 <Check className="w-3 h-3 text-[#14B8A6]" />
-                                <span>Copied</span>
+                                <span>Copied Full Key</span>
                               </>
                             ) : (
                               <>
@@ -1284,9 +1465,11 @@ func main() {
                   </div>
                 </div>
 
-                {/* Code Viewer */}
-                <pre className="p-4 rounded-xl bg-black/50 border border-[#F1F5F9]/10 text-xs font-mono text-[#F1F5F9] overflow-x-auto leading-relaxed">
-                  <code>{getGeneratedCodeSnippet()}</code>
+                {/* Code Viewer with IDE Syntax Highlighting */}
+                <pre className="p-4 rounded-xl bg-black/50 border border-[#F1F5F9]/10 text-xs font-mono overflow-x-auto leading-relaxed">
+                  <code className="block">
+                    {renderHighlightedCode(getGeneratedCodeSnippet())}
+                  </code>
                 </pre>
 
                 {/* Live Endpoint Metadata Summary */}
@@ -1317,12 +1500,25 @@ func main() {
                     <span className="text-[10px] text-[#F1F5F9]/60 block truncate">
                       Active Voice Key (.env)
                     </span>
-                    <span
-                      title={lastGeneratedKey}
-                      className="text-[11px] font-mono font-bold text-[#14B8A6] block truncate"
-                    >
-                      {lastGeneratedKey}
-                    </span>
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className="text-[11px] font-mono font-bold text-[#14B8A6] block truncate">
+                        {maskApiKey(lastGeneratedKey)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleCopy(lastGeneratedKey, "active-voice-key")
+                        }
+                        className="p-0.5 text-[#14B8A6] hover:opacity-80 cursor-pointer shrink-0"
+                        title="Copy full key"
+                      >
+                        {copiedTextId === "active-voice-key" ? (
+                          <Check className="w-3 h-3" />
+                        ) : (
+                          <Copy className="w-3 h-3" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

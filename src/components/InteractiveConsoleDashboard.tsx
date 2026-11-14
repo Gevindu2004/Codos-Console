@@ -144,16 +144,13 @@ const CATEGORIZED_API_CATALOG: ApiEndpointItem[] = [
     rateLimit: "50,000 req/s",
     version: "v1.5",
     sampleRequest: `{
-  "key_id": "key_prod_99f4",
+  "key_id": "API KEY 1",
   "grace_period_seconds": 3600,
   "scopes": ["voice:dispatch", "api:all", "llm:route"]
 }`,
     sampleResponse: `{
   "status": "rotated",
-  "new_key_prefix": "${
-    process.env.NEXT_PUBLIC_CODOS_ROTATED_KEY_PREFIX ||
-    "$NEXT_PUBLIC_CODOS_ROTATED_KEY_PREFIX"
-  }",
+  "new_key_prefix": "API**********",
   "old_key_expires_in": 3600
 }`,
   },
@@ -400,24 +397,93 @@ export const InteractiveConsoleDashboard: React.FC<
     localStorage.setItem("codos-theme", nextTheme);
   };
 
-  // API Key management state (loaded from .env)
+  // Masks an API key so only the first couple of characters are visible and the rest are stars (*)
+  const maskApiKey = (fullKey: string): string => {
+    const visiblePrefix = fullKey.slice(0, 3);
+    const starCount = Math.max(10, fullKey.length - 3);
+    return `${visiblePrefix}${"*".repeat(starCount)}`;
+  };
+
+  // Syntax highlighter for API request/response payloads
+  const renderPayloadHighlighted = (payload: string, prefix: string) => {
+    return payload.split("\n").map((line, lineIdx) => {
+      const tokens =
+        line.match(
+          /("[^"]*"\s*:|"[^"]*"|\b(?:GET|POST|DELETE|WSS|true|false|null)\b|\b\d+(?:\.\d+)?\b|[^\s"A-Za-z0-9_]+|\s+|\b[A-Za-z0-9_/-]+\b)/g
+        ) || [line];
+      return (
+        <div key={`${prefix}-${lineIdx}`} className="whitespace-pre font-mono">
+          {tokens.map((tok, i) => {
+            const key = `${prefix}-${lineIdx}-${i}`;
+            if (tok.startsWith('"') && tok.trimEnd().endsWith(":")) {
+              const colonIdx = tok.lastIndexOf(":");
+              return (
+                <React.Fragment key={key}>
+                  <span className="tok-prop">{tok.slice(0, colonIdx)}</span>
+                  <span className="tok-punct">{tok.slice(colonIdx)}</span>
+                </React.Fragment>
+              );
+            }
+            if (tok.startsWith('"') && tok.endsWith('"')) {
+              return (
+                <span key={key} className="tok-string">
+                  {tok}
+                </span>
+              );
+            }
+            if (
+              tok === "GET" ||
+              tok === "POST" ||
+              tok === "DELETE" ||
+              tok === "WSS" ||
+              tok === "true" ||
+              tok === "false"
+            ) {
+              return (
+                <span key={key} className="tok-keyword">
+                  {tok}
+                </span>
+              );
+            }
+            if (/^\d+(\.\d+)?$/.test(tok)) {
+              return (
+                <span key={key} className="tok-num">
+                  {tok}
+                </span>
+              );
+            }
+            if (/^[{}\[\],:]$/.test(tok)) {
+              return (
+                <span key={key} className="tok-punct">
+                  {tok}
+                </span>
+              );
+            }
+            return (
+              <span key={key} className="tok-fn">
+                {tok}
+              </span>
+            );
+          })}
+        </div>
+      );
+    });
+  };
+
+  // API Key management state
   const [apiKeys, setApiKeys] = useState([
     {
       id: "key-1",
-      name: "Production Webhook Key",
-      prefix:
-        process.env.NEXT_PUBLIC_CODOS_PROD_KEY_PREFIX ||
-        "$NEXT_PUBLIC_CODOS_PROD_KEY_PREFIX",
+      name: "API Key 1 — Production Webhook Key",
+      prefix: "API KEY 1",
       created: "2026-11-01",
       scopes: ["voice:dispatch", "api:all", "llm:route"],
       status: "active",
     },
     {
       id: "key-2",
-      name: "Staging Test Key",
-      prefix:
-        process.env.NEXT_PUBLIC_CODOS_STAGING_KEY_PREFIX ||
-        "$NEXT_PUBLIC_CODOS_STAGING_KEY_PREFIX",
+      name: "API Key 2 — Staging Test Key",
+      prefix: "API KEY 2",
       created: "2026-11-10",
       scopes: ["voice:read", "api:read", "llm:read"],
       status: "active",
@@ -442,14 +508,11 @@ export const InteractiveConsoleDashboard: React.FC<
 
   const handleGenerateKey = () => {
     if (!newKeyName.trim()) return;
-    const keyPrefix =
-      process.env.NEXT_PUBLIC_CODOS_GENERATED_KEY_PREFIX || "codos_env_key";
+    const nextNumber = apiKeys.length + 1;
     const newKey = {
       id: `key-${Date.now()}`,
       name: newKeyName,
-      prefix: `${keyPrefix}_${Math.random()
-        .toString(36)
-        .substring(2, 8)}...${Math.random().toString(36).substring(2, 6)}`,
+      prefix: `API KEY ${nextNumber}`,
       created: "2026-11-14",
       scopes:
         newKeyScope === "all"
@@ -1364,8 +1427,13 @@ export const InteractiveConsoleDashboard: React.FC<
                                           application/json
                                         </span>
                                       </div>
-                                      <pre className="p-3.5 rounded-xl bg-black/40 border border-[#F1F5F9]/12 text-[11px] font-mono text-[#F1F5F9] overflow-x-auto leading-relaxed">
-                                        <code>{api.sampleRequest}</code>
+                                      <pre className="p-3.5 rounded-xl bg-black/40 border border-[#F1F5F9]/12 text-[11px] font-mono overflow-x-auto leading-relaxed">
+                                        <code className="block">
+                                          {renderPayloadHighlighted(
+                                            api.sampleRequest,
+                                            `${api.id}-req`
+                                          )}
+                                        </code>
                                       </pre>
                                     </div>
 
@@ -1378,8 +1446,13 @@ export const InteractiveConsoleDashboard: React.FC<
                                           Edge Verified ({api.latency})
                                         </span>
                                       </div>
-                                      <pre className="p-3.5 rounded-xl bg-black/40 border border-[#F1F5F9]/12 text-[11px] font-mono text-[#F1F5F9] overflow-x-auto leading-relaxed">
-                                        <code>{api.sampleResponse}</code>
+                                      <pre className="p-3.5 rounded-xl bg-black/40 border border-[#F1F5F9]/12 text-[11px] font-mono overflow-x-auto leading-relaxed">
+                                        <code className="block">
+                                          {renderPayloadHighlighted(
+                                            api.sampleResponse,
+                                            `${api.id}-res`
+                                          )}
+                                        </code>
                                       </pre>
                                     </div>
                                   </div>
@@ -1389,7 +1462,9 @@ export const InteractiveConsoleDashboard: React.FC<
                                       Auth Header:{" "}
                                       <code>
                                         Authorization: Bearer{" "}
-                                        {apiKeys[0]?.prefix || "codos_live_..."}
+                                        {maskApiKey(
+                                          apiKeys[0]?.prefix || "API KEY 1"
+                                        )}
                                       </code>
                                     </span>
 
@@ -1449,11 +1524,11 @@ export const InteractiveConsoleDashboard: React.FC<
                           </span>
                         </div>
                         <div className="flex items-center gap-2 text-xs font-mono text-[#F1F5F9]/75">
-                          <span>{key.prefix}</span>
+                          <span>{maskApiKey(key.prefix)}</span>
                           <button
                             onClick={() => handleCopyKey(key.id, key.prefix)}
                             className="p-1 text-[#14B8A6] cursor-pointer"
-                            title="Copy key"
+                            title="Copy full key"
                           >
                             {copiedKeyId === key.id ? (
                               <Check className="w-3.5 h-3.5" />

@@ -236,30 +236,30 @@ html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
 
 /* IDE Syntax Highlighting Tokens (Dark & Light Themes) */
 .tok-keyword {
-  color: #C084FC;
+  color: #C084FC !important;
   font-weight: 600;
 }
 .tok-fn {
-  color: #38BDF8;
+  color: #38BDF8 !important;
 }
 .tok-string {
-  color: #34D399;
+  color: #34D399 !important;
 }
 .tok-prop {
-  color: #FBBF24;
+  color: #FBBF24 !important;
 }
 .tok-num {
-  color: #FB7185;
+  color: #FB7185 !important;
 }
 .tok-comment {
-  color: #64748B;
+  color: #64748B !important;
   font-style: italic;
 }
 .tok-var {
-  color: #E2E8F0;
+  color: #E2E8F0 !important;
 }
 .tok-punct {
-  color: #94A3B8;
+  color: #94A3B8 !important;
 }
 
 html[data-theme="light"] .tok-keyword {

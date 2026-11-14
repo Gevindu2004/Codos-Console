@@ -17,6 +17,7 @@
 .env.production.local
 .dev.vars
 .vars
+!.env.example
 env.ts
 **/env.ts
 src/config/env.ts
