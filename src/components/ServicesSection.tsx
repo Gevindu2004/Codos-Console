@@ -162,7 +162,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                     </h3>
                   </div>
                 </div>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#14B8A6]/15 text-[#14B8A6] border border-[#14B8A6]/35 whitespace-nowrap">
+                <span className="text-[11px] font-semibold text-[#14B8A6] whitespace-nowrap">
                   Sub-80ms Voice
                 </span>
               </div>
@@ -233,7 +233,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
             </span>
             <button
               onClick={() => onSelectService && onSelectService("voice")}
-              className="codos-cta-btn inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#14B8A6]/20 hover:bg-[#14B8A6] text-[#14B8A6] hover:text-[#0F172A] text-xs font-bold transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-[#14B8A6] hover:opacity-80 text-xs font-bold transition-all cursor-pointer"
             >
               <span>Manage Colleague</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
@@ -273,7 +273,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                     </h3>
                   </div>
                 </div>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#14B8A6]/15 text-[#14B8A6] border border-[#14B8A6]/35 whitespace-nowrap">
+                <span className="text-[11px] font-semibold text-[#14B8A6] whitespace-nowrap">
                   50k+ req/sec
                 </span>
               </div>
@@ -363,7 +363,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
             </span>
             <button
               onClick={() => onSelectService && onSelectService("api")}
-              className="codos-cta-btn inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#14B8A6]/20 hover:bg-[#14B8A6] text-[#14B8A6] hover:text-[#0F172A] text-xs font-bold transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-[#14B8A6] hover:opacity-80 text-xs font-bold transition-all cursor-pointer"
             >
               <span>Manage API Keys</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
@@ -403,7 +403,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                     </h3>
                   </div>
                 </div>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#14B8A6]/15 text-[#14B8A6] border border-[#14B8A6]/35 whitespace-nowrap">
+                <span className="text-[11px] font-semibold text-[#14B8A6] whitespace-nowrap">
                   Multi-Provider
                 </span>
               </div>
@@ -473,7 +473,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
             </span>
             <button
               onClick={() => onSelectService && onSelectService("llm")}
-              className="codos-cta-btn inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#14B8A6]/20 hover:bg-[#14B8A6] text-[#14B8A6] hover:text-[#0F172A] text-xs font-bold transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-[#14B8A6] hover:opacity-80 text-xs font-bold transition-all cursor-pointer"
             >
               <span>Open Sky Beak LLM</span>
               <ArrowUpRight className="w-3.5 h-3.5" />

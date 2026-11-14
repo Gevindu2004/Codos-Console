@@ -31,8 +31,10 @@ const FUNCTIONS_AND_TYPES = new Set([
   "CodosClient",
   "NewClient",
   "VoiceParams",
+  "LLMParams",
   "handleCustomerIncident",
   "complete",
+  "Complete",
   "dispatchColleague",
   "dispatch_colleague",
   "Dispatch",
@@ -40,6 +42,7 @@ const FUNCTIONS_AND_TYPES = new Set([
   "print",
   "Printf",
   "getenv",
+  "Getenv",
   "Background",
   "main",
 ]);
@@ -48,12 +51,15 @@ const PROPERTIES = new Set([
   "apiKey",
   "region",
   "prompt",
+  "Prompt",
   "routing",
+  "Routing",
   "recipientPhone",
   "recipient_phone",
   "persona",
   "customContext",
   "context",
+  "Context",
   "Recipient",
   "Persona",
   "CODOS_API_KEY",
@@ -61,10 +67,12 @@ const PROPERTIES = new Set([
   "id",
   "latencyMs",
   "data",
+  "Data",
   "output",
   "session_id",
   "ID",
   "llm",
+  "LLM",
   "voice",
   "Voice",
 ]);
@@ -156,14 +164,17 @@ function renderHighlightedCode(code: string): React.ReactNode {
     }
 
     return (
-      <div key={lineIdx} className="table-row hover:bg-[#14B8A6]/[0.06] transition-colors">
-        <span className="table-cell pr-4 select-none text-right text-[10px] opacity-35 font-mono w-7">
+      <div
+        key={lineIdx}
+        className="flex items-baseline hover:bg-[#14B8A6]/[0.06] px-1 rounded transition-colors min-h-[20px]"
+      >
+        <span className="pr-4 select-none text-right text-[10px] opacity-40 font-mono w-8 flex-shrink-0">
           {String(lineIdx + 1).padStart(2, "0")}
         </span>
-        <span className="table-cell whitespace-pre">
+        <span className="whitespace-pre font-mono">
           {codePart ? highlightCodeSegment(codePart, `l${lineIdx}`) : null}
           {commentPart ? <span className="tok-comment">{commentPart}</span> : null}
-          {line.length === 0 ? "\n" : null}
+          {line.length === 0 ? " " : null}
         </span>
       </div>
     );
@@ -230,18 +241,30 @@ print(f"Colleague connected: {call.session_id} on Thumbs Up Gateway")`,
     go: `package main
 
 import (
-	"context"
-	"fmt"
-	"github.com/viacodos/codos-go/codos"
+  "context"
+  "fmt"
+  "os"
+  "github.com/viacodos/codos-go/codos"
 )
 
 func main() {
-	client := codos.NewClient("codos_live_prod_898f21a...")
-	session, _ := client.Voice.Dispatch(context.Background(), &codos.VoiceParams{
-		Recipient: "+15550198273",
-		Persona:   "enterprise_agent",
-	})
-	fmt.Printf("Voice Colleague Active: %s via Thumbs Up API\\n", session.ID)
+  // Initialize unified Codos Console client
+  client := codos.NewClient(os.Getenv("CODOS_API_KEY"))
+
+  // 1. Route prompt via Sky Beak LLM router
+  analysis, _ := client.LLM.Complete(context.Background(), &codos.LLMParams{
+    Prompt:  "User reports payment gateway timeout error",
+    Routing: "lowest-latency",
+  })
+
+  // 2. Dispatch autonomous Call Colleague voice session
+  session, _ := client.Voice.Dispatch(context.Background(), &codos.VoiceParams{
+    Recipient: "+15550198273",
+    Persona:   "enterprise_agent",
+    Context:   analysis.Data,
+  })
+
+  fmt.Printf("Voice Colleague Active: %s\\n", session.ID)
 }`,
   };
 
@@ -360,9 +383,9 @@ func main() {
             </div>
           </div>
 
-          <div className="p-5 bg-[#090E1A]/90 overflow-auto flex-1 text-xs font-mono leading-relaxed text-[#F1F5F9] flex items-center">
-            <pre className="w-full table">
-              <code>{renderHighlightedCode(codeSnippets[activeLang])}</code>
+          <div className="p-5 bg-[#090E1A]/90 overflow-auto flex-1 text-xs font-mono leading-relaxed text-[#F1F5F9]">
+            <pre className="w-full m-0">
+              <code className="block">{renderHighlightedCode(codeSnippets[activeLang])}</code>
             </pre>
           </div>
         </div>
