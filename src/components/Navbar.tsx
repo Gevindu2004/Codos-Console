@@ -54,6 +54,51 @@ export const Navbar: React.FC<NavbarProps> = ({
     { label: "Pricing", href: "#pricing" },
   ];
 
+  const handleNavClick = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    item: { label: string; href: string }
+  ) => {
+    e.preventDefault();
+    setActiveNav(item.label);
+    const targetId = item.href.replace("#", "");
+
+    const isServiceCard =
+      targetId === "voice-service" ||
+      targetId === "api-service" ||
+      targetId === "llm-service";
+
+    // Notify ServicesSection which card (if any) was explicitly selected
+    window.dispatchEvent(
+      new CustomEvent("codos:highlight-service", {
+        detail: isServiceCard ? targetId : null,
+      })
+    );
+
+    // On desktop (>= 1024px), all 3 service cards sit side-by-side inside #services.
+    // Scrolling to #services aligns the section title and all 3 cards cleanly below the navbar.
+    if (isServiceCard && window.innerWidth >= 1024) {
+      const servicesSection = document.getElementById("services");
+      if (servicesSection) {
+        servicesSection.scrollIntoView({ behavior: "smooth", block: "start" });
+        window.history.replaceState(null, "", item.href);
+        return;
+      }
+    }
+
+    const targetEl = document.getElementById(targetId);
+    if (targetEl) {
+      if (isServiceCard) {
+        // On mobile/tablet (< 1024px), cards stack vertically — offset for fixed navbar
+        const y =
+          targetEl.getBoundingClientRect().top + window.scrollY - 88;
+        window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+      } else {
+        targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      window.history.replaceState(null, "", item.href);
+    }
+  };
+
   const isLight = theme === "light";
 
   return (
@@ -91,7 +136,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <a
                 key={item.label}
                 href={item.href}
-                onClick={() => setActiveNav(item.label)}
+                onClick={(e) => handleNavClick(e, item)}
                 className={`relative px-4 py-1.5 rounded-full text-xs font-medium transition-all duration-300 flex items-center gap-2 ${
                   isActive
                     ? isLight
@@ -192,8 +237,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               <a
                 key={link.label}
                 href={link.href}
-                onClick={() => {
-                  setActiveNav(link.label);
+                onClick={(e) => {
+                  handleNavClick(e, link);
                   setDrawerOpen(false);
                 }}
                 className="px-3.5 py-2 rounded-xl text-sm text-[#F1F5F9]/90 hover:bg-[#14B8A6]/10 flex items-center justify-between transition-colors"

@@ -296,3 +296,138 @@ nextjs-portal,
 #devtools-indicator {
   display: none !important;
 }
+
+/* Smooth scrolling & Cloud-Loading Scroll Reveal Animations */
+html {
+  scroll-behavior: smooth;
+}
+
+@keyframes cloudShimmerSweep {
+  0% {
+    transform: translateX(-120%) skewX(-18deg);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateX(180%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+.cloud-loading-sweep {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(20, 184, 166, 0.14) 35%,
+    rgba(241, 245, 249, 0.22) 50%,
+    rgba(20, 184, 166, 0.14) 65%,
+    transparent 100%
+  );
+  animation: cloudShimmerSweep 1.05s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+html[data-theme="light"] .cloud-loading-sweep {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(20, 33, 61, 0.08) 35%,
+    rgba(255, 255, 255, 0.65) 50%,
+    rgba(20, 33, 61, 0.08) 65%,
+    transparent 100%
+  );
+}
+
+.codos-cloud-mist {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(110px);
+  transition: transform 0.25s ease-out;
+}
+
+.codos-cloud-mist-1 {
+  width: 520px;
+  height: 260px;
+  top: 22%;
+  left: -120px;
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.11) 0%, transparent 70%);
+}
+
+.codos-cloud-mist-2 {
+  width: 560px;
+  height: 280px;
+  bottom: 14%;
+  right: -140px;
+  background: radial-gradient(circle, rgba(241, 245, 249, 0.07) 0%, transparent 70%);
+}
+
+html[data-theme="light"] .codos-cloud-mist-1 {
+  background: radial-gradient(circle, rgba(20, 33, 61, 0.08) 0%, transparent 70%) !important;
+}
+
+html[data-theme="light"] .codos-cloud-mist-2 {
+  background: radial-gradient(circle, rgba(20, 33, 61, 0.06) 0%, transparent 70%) !important;
+}
+
+/* Drifting Volumetric Cloud Horizon & Card Float inside Core Services */
+@keyframes serviceCloudDrift {
+  0%, 100% {
+    transform: translate3d(0px, 0px, 0px) scale(1);
+  }
+  50% {
+    transform: translate3d(42px, -22px, 0px) scale(1.08);
+  }
+}
+
+@keyframes cloudCardFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.codos-service-cloud-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(95px);
+  animation: serviceCloudDrift 11s ease-in-out infinite;
+}
+
+.codos-service-cloud-orb-1 {
+  width: 440px;
+  height: 240px;
+  top: 12%;
+  left: 6%;
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.14) 0%, transparent 72%);
+  animation-delay: 0s;
+}
+
+.codos-service-cloud-orb-2 {
+  width: 500px;
+  height: 260px;
+  top: 36%;
+  left: 34%;
+  background: radial-gradient(circle, rgba(241, 245, 249, 0.08) 0%, transparent 72%);
+  animation-delay: -3.5s;
+}
+
+.codos-service-cloud-orb-3 {
+  width: 440px;
+  height: 240px;
+  bottom: 10%;
+  right: 6%;
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.12) 0%, transparent 72%);
+  animation-delay: -7s;
+}
+
+html[data-theme="light"] .codos-service-cloud-orb-1,
+html[data-theme="light"] .codos-service-cloud-orb-3 {
+  background: radial-gradient(circle, rgba(20, 33, 61, 0.09) 0%, transparent 72%) !important;
+}
+
+html[data-theme="light"] .codos-service-cloud-orb-2 {
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.75) 0%, transparent 72%) !important;
+}

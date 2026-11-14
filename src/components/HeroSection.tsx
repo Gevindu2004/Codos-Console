@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { ScrollCloudReveal } from "./ScrollCloudReveal";
 import {
   MapPin,
   Home,
@@ -121,22 +122,22 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
           }`}
         />
 
-        {/* Center-right glow behind the fluted glass: Navy (#14213D) in Light Theme, Teal (#14B8A6) in Dark Theme */}
+        {/* Center-right glow behind the fluted glass: Rich Navy (#14213D) in Light Theme, Teal (#14B8A6) in Dark Theme */}
         <div
-          className="absolute top-[14%] left-[34%] w-[560px] h-[560px] rounded-full opacity-90 blur-[110px]"
+          className="absolute top-[10%] left-[32%] w-[600px] h-[600px] rounded-full opacity-95 blur-[95px]"
           style={{
             background: isLightTheme
-              ? "radial-gradient(circle, rgba(20,33,61,0.48) 0%, rgba(20,33,61,0.24) 48%, transparent 100%)"
+              ? "radial-gradient(circle, #14213D 0%, rgba(20,33,61,0.88) 40%, rgba(20,33,61,0.45) 68%, transparent 100%)"
               : "radial-gradient(circle, #14B8A6 0%, rgba(20,184,166,0.65) 38%, rgba(13,148,136,0.25) 68%, transparent 100%)",
           }}
         />
 
         {/* Core glow */}
         <div
-          className="absolute top-[24%] left-[44%] w-[340px] h-[340px] rounded-full opacity-65 blur-[90px]"
+          className="absolute top-[22%] left-[42%] w-[380px] h-[380px] rounded-full opacity-85 blur-[80px]"
           style={{
             background: isLightTheme
-              ? "radial-gradient(circle, #F1F5F9 0%, rgba(20,33,61,0.32) 55%, transparent 100%)"
+              ? "radial-gradient(circle, #14213D 0%, rgba(20,33,61,0.75) 55%, transparent 100%)"
               : "radial-gradient(circle, #F1F5F9 0%, rgba(20,184,166,0.38) 55%, transparent 100%)",
           }}
         />
@@ -163,11 +164,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
             ? `
             repeating-linear-gradient(
               90deg,
-              rgba(241, 245, 249, 0.55) 0px,
-              rgba(244, 237, 224, 0.15) 3px,
-              rgba(15, 23, 42, 0.055) 7px,
-              rgba(244, 237, 224, 0.2) 11px,
-              rgba(241, 245, 249, 0.55) 14px
+              rgba(241, 245, 249, 0.24) 0px,
+              rgba(244, 237, 224, 0.08) 3px,
+              rgba(20, 33, 61, 0.14) 7px,
+              rgba(244, 237, 224, 0.1) 11px,
+              rgba(241, 245, 249, 0.24) 14px
             )
           `
             : `
@@ -197,7 +198,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
          ===================================================================== */}
       <div className="relative z-20 flex-1 w-full px-6 sm:px-10 lg:px-12 flex flex-col justify-end pb-5">
         {/* UPPER-RIGHT FLOATING 3D PARALLAX FROSTED GLASS CARD */}
-        <div className="w-full flex justify-end lg:absolute lg:top-2 lg:right-12 lg:w-auto mb-4 lg:mb-0">
+        <ScrollCloudReveal
+          direction="right"
+          delayMs={120}
+          className="w-full flex justify-end lg:absolute lg:top-2 lg:right-12 lg:w-auto mb-4 lg:mb-0"
+        >
           <div
             style={{
               transform: `perspective(1100px) rotateX(${
@@ -344,17 +349,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
               </button>
             </div>
           </div>
-        </div>
+        </ScrollCloudReveal>
 
         {/* LOWER HERO HEADLINE + SUBCOPY (LEFT) & CTA BUTTONS (RIGHT) */}
-        <div
-          style={{
-            transform: `translate3d(${mouse.x * -10}px, ${
-              mouse.y * -6 - scrollY * 0.04
-            }px, 20px)`,
-          }}
-          className="transition-transform duration-200 ease-out w-full"
-        >
+        <ScrollCloudReveal direction="up" delayMs={40} className="w-full">
+        <div className="w-full">
           {/* Giant Two-Line Editorial Headline */}
           <h1
             className={`text-4xl sm:text-5xl md:text-6xl lg:text-[66px] font-normal tracking-[-0.03em] text-[#F1F5F9] leading-[1.02] max-w-3xl ${
@@ -399,12 +398,17 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
             </div>
           </div>
         </div>
+        </ScrollCloudReveal>
       </div>
 
       {/* =====================================================================
           LAYER 5: BOTTOM 5-COLUMN FEATURE BAR
          ===================================================================== */}
-      <div className="relative z-20 w-full px-6 sm:px-10 lg:px-12 flex-shrink-0">
+      <ScrollCloudReveal
+        direction="up"
+        delayMs={220}
+        className="relative z-20 w-full px-6 sm:px-10 lg:px-12 flex-shrink-0"
+      >
         <div className="border-t border-[#F1F5F9]/[0.16] grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 pt-3.5">
           {bottomFeatures.map((feat, idx) => {
             const Icon = feat.icon;
@@ -459,7 +463,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
             );
           })}
         </div>
-      </div>
+      </ScrollCloudReveal>
     </section>
   );
 };

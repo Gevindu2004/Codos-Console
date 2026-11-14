@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { ScrollCloudReveal } from "./ScrollCloudReveal";
 import {
   Copy,
   Check,
@@ -280,7 +281,11 @@ func main() {
       className="w-full lg:h-screen lg:max-h-screen min-h-[650px] pt-16 pb-6 px-6 sm:px-10 lg:px-12 flex flex-col justify-between gap-5 overflow-hidden bg-[#0F172A]"
     >
       {/* Compact Header */}
-      <div className="text-center space-y-2 max-w-4xl mx-auto flex-shrink-0">
+      <ScrollCloudReveal
+        direction="up"
+        delayMs={0}
+        className="text-center space-y-2 max-w-4xl mx-auto flex-shrink-0"
+      >
         <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-[#F1F5F9]">
           Unified Architecture. <span className="text-[#14B8A6]">Engineered for Scale.</span>
         </h2>
@@ -288,58 +293,81 @@ func main() {
           Stop managing 3 separate logins, 3 payment methods, and 3 disparate API keys.
           One SDK client gives you programmatic control over voice agents, API gateways, and LLM routers.
         </p>
-      </div>
+      </ScrollCloudReveal>
 
       {/* Main Content Grid */}
       <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0 items-stretch">
         <div className="lg:col-span-5 flex flex-col justify-between gap-4">
-          <div className="p-5 rounded-2xl glass-panel border border-[#F1F5F9]/12 hover:border-[#14B8A6]/45 transition-colors space-y-2 flex-1 flex flex-col justify-center">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-[#14B8A6]/20 flex items-center justify-center text-[#14B8A6] flex-shrink-0">
-                <Key className="w-4 h-4" />
+          <ScrollCloudReveal
+            direction="left"
+            delayMs={60}
+            className="flex-1 flex flex-col"
+          >
+            <div className="p-5 rounded-2xl glass-panel border border-[#F1F5F9]/12 hover:border-[#14B8A6]/45 transition-colors space-y-2 flex-1 flex flex-col justify-center">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#14B8A6]/20 flex items-center justify-center text-[#14B8A6] flex-shrink-0">
+                  <Key className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-bold text-[#F1F5F9]">
+                  1. Single Authentication
+                </h3>
               </div>
-              <h3 className="text-base font-bold text-[#F1F5F9]">
-                1. Single Authentication
-              </h3>
+              <p className="text-xs text-[#F1F5F9]/70 leading-relaxed">
+                One master key with fine-grained RBAC permissions controls your voice dispatchers,
+                gateway rate limits, and LLM token budgets.
+              </p>
             </div>
-            <p className="text-xs text-[#F1F5F9]/70 leading-relaxed">
-              One master key with fine-grained RBAC permissions controls your voice dispatchers,
-              gateway rate limits, and LLM token budgets.
-            </p>
-          </div>
+          </ScrollCloudReveal>
 
-          <div className="p-5 rounded-2xl glass-panel border border-[#F1F5F9]/12 hover:border-[#14B8A6]/45 transition-colors space-y-2 flex-1 flex flex-col justify-center">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-[#14B8A6]/20 flex items-center justify-center text-[#14B8A6] flex-shrink-0">
-                <Layers className="w-4 h-4" />
+          <ScrollCloudReveal
+            direction="left"
+            delayMs={170}
+            className="flex-1 flex flex-col"
+          >
+            <div className="p-5 rounded-2xl glass-panel border border-[#F1F5F9]/12 hover:border-[#14B8A6]/45 transition-colors space-y-2 flex-1 flex flex-col justify-center">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#14B8A6]/20 flex items-center justify-center text-[#14B8A6] flex-shrink-0">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-bold text-[#F1F5F9]">
+                  2. Inter-Service Synergy
+                </h3>
               </div>
-              <h3 className="text-base font-bold text-[#F1F5F9]">
-                2. Inter-Service Synergy
-              </h3>
+              <p className="text-xs text-[#F1F5F9]/70 leading-relaxed">
+                Call Colleague streams live conversations into Thumbs Up API metrics while
+                fetching dynamic context from Sky Beak LLM in real time.
+              </p>
             </div>
-            <p className="text-xs text-[#F1F5F9]/70 leading-relaxed">
-              Call Colleague streams live conversations into Thumbs Up API metrics while
-              fetching dynamic context from Sky Beak LLM in real time.
-            </p>
-          </div>
+          </ScrollCloudReveal>
 
-          <div className="p-5 rounded-2xl glass-panel border border-[#F1F5F9]/12 hover:border-[#14B8A6]/45 transition-colors space-y-2 flex-1 flex flex-col justify-center">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-[#14B8A6]/20 flex items-center justify-center text-[#14B8A6] flex-shrink-0">
-                <CreditCard className="w-4 h-4" />
+          <ScrollCloudReveal
+            direction="left"
+            delayMs={280}
+            className="flex-1 flex flex-col"
+          >
+            <div className="p-5 rounded-2xl glass-panel border border-[#F1F5F9]/12 hover:border-[#14B8A6]/45 transition-colors space-y-2 flex-1 flex flex-col justify-center">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#14B8A6]/20 flex items-center justify-center text-[#14B8A6] flex-shrink-0">
+                  <CreditCard className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-bold text-[#F1F5F9]">
+                  3. Consolidated Invoicing
+                </h3>
               </div>
-              <h3 className="text-base font-bold text-[#F1F5F9]">
-                3. Consolidated Invoicing
-              </h3>
+              <p className="text-xs text-[#F1F5F9]/70 leading-relaxed">
+                Call minutes, API request volume, and LLM token expenditures are bundled into
+                a single monthly invoice with unified credit allocations.
+              </p>
             </div>
-            <p className="text-xs text-[#F1F5F9]/70 leading-relaxed">
-              Call minutes, API request volume, and LLM token expenditures are bundled into
-              a single monthly invoice with unified credit allocations.
-            </p>
-          </div>
+          </ScrollCloudReveal>
         </div>
 
-        <div className="lg:col-span-7 rounded-3xl glass-panel border border-[#F1F5F9]/15 overflow-hidden shadow-2xl flex flex-col">
+        <ScrollCloudReveal
+          direction="right"
+          delayMs={140}
+          className="lg:col-span-7 flex flex-col min-h-0"
+        >
+          <div className="rounded-3xl glass-panel border border-[#F1F5F9]/15 overflow-hidden shadow-2xl flex flex-col flex-1 h-full">
           <div className="flex items-center justify-between px-5 py-3 bg-[#090E1A] border-b border-[#F1F5F9]/10 flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5">
@@ -388,7 +416,8 @@ func main() {
               <code className="block">{renderHighlightedCode(codeSnippets[activeLang])}</code>
             </pre>
           </div>
-        </div>
+          </div>
+        </ScrollCloudReveal>
       </div>
     </section>
   );

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Check, Sparkles, ArrowRight } from "lucide-react";
+import { ScrollCloudReveal } from "./ScrollCloudReveal";
 
 export const PricingSection: React.FC<{ onGetStarted?: () => void }> = ({
   onGetStarted,
@@ -67,7 +68,11 @@ export const PricingSection: React.FC<{ onGetStarted?: () => void }> = ({
       className="w-full lg:h-screen lg:max-h-screen min-h-[660px] pt-16 pb-6 px-6 sm:px-10 lg:px-12 flex flex-col justify-between gap-5 overflow-hidden bg-[#0F172A]"
     >
       {/* Compact Header */}
-      <div className="text-center space-y-2 max-w-3xl mx-auto flex-shrink-0">
+      <ScrollCloudReveal
+        direction="up"
+        delayMs={0}
+        className="text-center space-y-2 max-w-3xl mx-auto flex-shrink-0"
+      >
         <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-[#F1F5F9]">
           One Plan. <span className="text-[#14B8A6]">Three Unified Services.</span>
         </h2>
@@ -108,13 +113,18 @@ export const PricingSection: React.FC<{ onGetStarted?: () => void }> = ({
             </span>
           </div>
         </div>
-      </div>
+      </ScrollCloudReveal>
 
       {/* Full-Width Pricing Cards Grid */}
       <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0 items-stretch pt-2">
-        {plans.map((p) => (
-          <div
+        {plans.map((p, idx) => (
+          <ScrollCloudReveal
             key={p.name}
+            direction="scale"
+            delayMs={80 + idx * 140}
+            className="h-full flex flex-col"
+          >
+          <div
             className={`rounded-3xl p-6 flex flex-col justify-between transition-all duration-300 relative h-full ${
               p.highlight
                 ? "glass-panel border-2 border-[#14B8A6] shadow-2xl bg-[#0F172A]/95"
@@ -170,6 +180,7 @@ export const PricingSection: React.FC<{ onGetStarted?: () => void }> = ({
               </button>
             </div>
           </div>
+          </ScrollCloudReveal>
         ))}
       </div>
     </section>
