@@ -1,0 +1,154 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# =====================================================================
+# 1. ENVIRONMENT VARIABLES & SECRET CONFIGS
+# =====================================================================
+.env
+.env.*
+*.env
+*.env.*
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.staging
+.env.production
+.env.production.local
+.dev.vars
+.vars
+!.env.example
+!.env.template
+
+# =====================================================================
+# 2. CRYPTOGRAPHIC KEYS, CERTIFICATES, TOKENS & CREDENTIALS
+# =====================================================================
+*.pem
+*.key
+*.pub
+*.crt
+*.cer
+*.csr
+*.der
+*.pfx
+*.p12
+*.p7b
+*.p7c
+*.jks
+*.keystore
+*.truststore
+*.gpg
+*.pgp
+*.asc
+*.kdbx
+*.ovpn
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+*.secret
+*.secrets
+*secret*.json
+*secret*.yaml
+*secret*.yml
+*secret*.txt
+*credentials*.json
+*credentials*.yaml
+*credentials*.yml
+secrets/
+/secrets
+.secrets/
+/private
+private/
+.private/
+credentials.json
+client_secret*.json
+service-account*.json
+service_account*.json
+firebase-adminsdk*.json
+gcloud-service-key.json
+google-services.json
+GoogleService-Info.plist
+aws-exports.js
+.aws/
+.gcp/
+.azure/
+.ssh/
+.gnupg/
+.npmrc
+.yarnrc
+.yarnrc.yml
+.pypirc
+.netrc
+.htpasswd
+.docker/config.json
+vault.json
+token.json
+tokens.json
+api-keys.json
+apikeys.json
+master.key
+config/master.key
+
+# =====================================================================
+# 3. DEPENDENCIES & PACKAGE MANAGERS
+# =====================================================================
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# =====================================================================
+# 4. NEXT.JS, BUILD & COVERAGE ARTIFACTS
+# =====================================================================
+/.next/
+/out/
+/build
+/dist
+/coverage
+*.tsbuildinfo
+next-env.d.ts
+
+# =====================================================================
+# 5. LOCAL DATABASES, BACKUPS & LOGS
+# =====================================================================
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sql.gz
+*.dump
+*.bak
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.log
+
+# =====================================================================
+# 6. CLOUD, INFRASTRUCTURE & IDE / AGENT LOCAL STATE
+# =====================================================================
+.vercel
+.netlify
+.serverless
+.terraform
+*.tfstate
+*.tfstate.*
+*.tfvars
+.wrangler
+.supabase
+.firebase
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.cursor/
+.claude/
+.gemini/
+.DS_Store
+Thumbs.db
