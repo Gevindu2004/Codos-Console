@@ -4,11 +4,171 @@ import React, { useState } from "react";
 import {
   Copy,
   Check,
-  Cpu,
   Layers,
   CreditCard,
   Key,
 } from "lucide-react";
+
+const KEYWORDS = new Set([
+  "import",
+  "from",
+  "const",
+  "let",
+  "var",
+  "new",
+  "async",
+  "function",
+  "await",
+  "return",
+  "package",
+  "func",
+  "curl",
+  "POST",
+]);
+
+const FUNCTIONS_AND_TYPES = new Set([
+  "CodosConsole",
+  "CodosClient",
+  "NewClient",
+  "VoiceParams",
+  "handleCustomerIncident",
+  "complete",
+  "dispatchColleague",
+  "dispatch_colleague",
+  "Dispatch",
+  "log",
+  "print",
+  "Printf",
+  "getenv",
+  "Background",
+  "main",
+]);
+
+const PROPERTIES = new Set([
+  "apiKey",
+  "region",
+  "prompt",
+  "routing",
+  "recipientPhone",
+  "recipient_phone",
+  "persona",
+  "customContext",
+  "context",
+  "Recipient",
+  "Persona",
+  "CODOS_API_KEY",
+  "api_key",
+  "id",
+  "latencyMs",
+  "data",
+  "output",
+  "session_id",
+  "ID",
+  "llm",
+  "voice",
+  "Voice",
+]);
+
+function highlightCodeSegment(segment: string, keyPrefix: string): React.ReactNode[] {
+  // Match strings ("..." or '...'), URLs, flags (-X, -H, -d), words, numbers, or punctuation
+  const tokenRegex =
+    /("[^"]*"|'[^']*'|https?:\/\/[^\s"\\]+|-[XHd]\b|\b\d+(?:\.\d+)?\b|\b[A-Za-z_][A-Za-z0-9_]*\b|[^\s"A-Za-z0-9_]+|\s+)/g;
+  const parts = segment.match(tokenRegex) || [segment];
+
+  return parts.map((token, idx) => {
+    const key = `${keyPrefix}-${idx}`;
+    if (
+      (token.startsWith('"') && token.endsWith('"')) ||
+      (token.startsWith("'") && token.endsWith("'")) ||
+      token.startsWith("http://") ||
+      token.startsWith("https://")
+    ) {
+      return (
+        <span key={key} className="tok-string">
+          {token}
+        </span>
+      );
+    }
+    if (token === "-X" || token === "-H" || token === "-d" || KEYWORDS.has(token)) {
+      return (
+        <span key={key} className="tok-keyword">
+          {token}
+        </span>
+      );
+    }
+    if (FUNCTIONS_AND_TYPES.has(token)) {
+      return (
+        <span key={key} className="tok-fn">
+          {token}
+        </span>
+      );
+    }
+    if (PROPERTIES.has(token)) {
+      return (
+        <span key={key} className="tok-prop">
+          {token}
+        </span>
+      );
+    }
+    if (/^\d+(\.\d+)?$/.test(token)) {
+      return (
+        <span key={key} className="tok-num">
+          {token}
+        </span>
+      );
+    }
+    if (/^[A-Za-z_]/.test(token)) {
+      return (
+        <span key={key} className="tok-var">
+          {token}
+        </span>
+      );
+    }
+    if (/^\s+$/.test(token)) {
+      return token;
+    }
+    return (
+      <span key={key} className="tok-punct">
+        {token}
+      </span>
+    );
+  });
+}
+
+function renderHighlightedCode(code: string): React.ReactNode {
+  const lines = code.split("\n");
+  return lines.map((line, lineIdx) => {
+    const trimmed = line.trimStart();
+    let codePart = line;
+    let commentPart = "";
+
+    if (trimmed.startsWith("//") || trimmed.startsWith("#")) {
+      const commentStart = line.indexOf(trimmed[0]);
+      codePart = line.slice(0, commentStart);
+      commentPart = line.slice(commentStart);
+    } else {
+      // Check for inline // comment (not inside https://)
+      const inlineSlash = line.indexOf(" //");
+      if (inlineSlash !== -1) {
+        codePart = line.slice(0, inlineSlash);
+        commentPart = line.slice(inlineSlash);
+      }
+    }
+
+    return (
+      <div key={lineIdx} className="table-row hover:bg-[#14B8A6]/[0.06] transition-colors">
+        <span className="table-cell pr-4 select-none text-right text-[10px] opacity-35 font-mono w-7">
+          {String(lineIdx + 1).padStart(2, "0")}
+        </span>
+        <span className="table-cell whitespace-pre">
+          {codePart ? highlightCodeSegment(codePart, `l${lineIdx}`) : null}
+          {commentPart ? <span className="tok-comment">{commentPart}</span> : null}
+          {line.length === 0 ? "\n" : null}
+        </span>
+      </div>
+    );
+  });
+}
 
 export const UnifiedArchitecture: React.FC = () => {
   const [activeLang, setActiveLang] = useState<"ts" | "py" | "curl" | "go">("ts");
@@ -160,11 +320,11 @@ func main() {
           <div className="flex items-center justify-between px-5 py-3 bg-[#090E1A] border-b border-[#F1F5F9]/10 flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#14B8A6]" />
-                <span className="w-2.5 h-2.5 rounded-full bg-[#F1F5F9]/40" />
-                <span className="w-2.5 h-2.5 rounded-full bg-[#F1F5F9]/20" />
+                <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F56]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-[#27C93F]" />
               </div>
-              <span className="text-xs font-mono text-[#F1F5F9]/60 hidden sm:inline">
+              <span className="text-xs font-mono text-[#F1F5F9]/70 hidden sm:inline">
                 codos-console-unified-workflow.{activeLang}
               </span>
             </div>
@@ -177,7 +337,7 @@ func main() {
                     onClick={() => setActiveLang(lang)}
                     className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
                       activeLang === lang
-                        ? "bg-[#14B8A6] text-[#0F172A] font-bold"
+                        ? "codos-cta-btn bg-[#14B8A6] text-[#0F172A] font-bold"
                         : "text-[#F1F5F9]/60 hover:text-[#F1F5F9]"
                     }`}
                   >
@@ -201,8 +361,8 @@ func main() {
           </div>
 
           <div className="p-5 bg-[#090E1A]/90 overflow-auto flex-1 text-xs font-mono leading-relaxed text-[#F1F5F9] flex items-center">
-            <pre className="w-full">
-              <code>{codeSnippets[activeLang]}</code>
+            <pre className="w-full table">
+              <code>{renderHighlightedCode(codeSnippets[activeLang])}</code>
             </pre>
           </div>
         </div>

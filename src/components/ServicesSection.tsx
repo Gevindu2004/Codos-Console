@@ -328,10 +328,28 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
               </div>
 
               <pre className="text-[10px] font-mono text-[#F1F5F9]/80 overflow-x-auto p-2 bg-black/40 rounded-lg leading-tight">
-                <code>{`await codos.apiKey.create({
-  scope: ["voice:write", "llm:read"],
-  rateLimit: 10000
-});`}</code>
+                <code>
+                  <span className="tok-keyword">await</span>{" "}
+                  <span className="tok-var">codos</span>
+                  <span className="tok-punct">.</span>
+                  <span className="tok-prop">apiKey</span>
+                  <span className="tok-punct">.</span>
+                  <span className="tok-fn">create</span>
+                  <span className="tok-punct">({"{"}</span>
+                  {"\n  "}
+                  <span className="tok-prop">scope</span>
+                  <span className="tok-punct">: [</span>
+                  <span className="tok-string">&quot;voice:write&quot;</span>
+                  <span className="tok-punct">, </span>
+                  <span className="tok-string">&quot;llm:read&quot;</span>
+                  <span className="tok-punct">],</span>
+                  {"\n  "}
+                  <span className="tok-prop">rateLimit</span>
+                  <span className="tok-punct">: </span>
+                  <span className="tok-num">10000</span>
+                  {"\n"}
+                  <span className="tok-punct">{"});"}</span>
+                </code>
               </pre>
             </div>
           </div>

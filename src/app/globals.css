@@ -233,3 +233,66 @@ html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
 .wave-bar {
   animation: wavePulse 1.2s ease-in-out infinite;
 }
+
+/* IDE Syntax Highlighting Tokens (Dark & Light Themes) */
+.tok-keyword {
+  color: #C084FC;
+  font-weight: 600;
+}
+.tok-fn {
+  color: #38BDF8;
+}
+.tok-string {
+  color: #34D399;
+}
+.tok-prop {
+  color: #FBBF24;
+}
+.tok-num {
+  color: #FB7185;
+}
+.tok-comment {
+  color: #64748B;
+  font-style: italic;
+}
+.tok-var {
+  color: #E2E8F0;
+}
+.tok-punct {
+  color: #94A3B8;
+}
+
+html[data-theme="light"] .tok-keyword {
+  color: #7C3AED !important;
+  font-weight: 600;
+}
+html[data-theme="light"] .tok-fn {
+  color: #0284C7 !important;
+}
+html[data-theme="light"] .tok-string {
+  color: #059669 !important;
+}
+html[data-theme="light"] .tok-prop {
+  color: #B45309 !important;
+}
+html[data-theme="light"] .tok-num {
+  color: #E11D48 !important;
+}
+html[data-theme="light"] .tok-comment {
+  color: #64748B !important;
+  font-style: italic;
+}
+html[data-theme="light"] .tok-var {
+  color: #14213D !important;
+}
+html[data-theme="light"] .tok-punct {
+  color: #475569 !important;
+}
+
+/* Hide Next.js floating dev indicator badge */
+nextjs-portal,
+[data-nextjs-toast],
+[data-nextjs-dev-tools-button],
+#devtools-indicator {
+  display: none !important;
+}
