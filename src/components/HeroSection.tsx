@@ -353,7 +353,14 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
 
         {/* LOWER HERO HEADLINE + SUBCOPY (LEFT) & CTA BUTTONS (RIGHT) */}
         <ScrollCloudReveal direction="up" delayMs={40} className="w-full">
-        <div className="w-full">
+        <div
+          style={{
+            transform: `translate3d(${mouse.x * -10}px, ${
+              mouse.y * -6 - scrollY * 0.04
+            }px, 20px)`,
+          }}
+          className="transition-transform duration-200 ease-out w-full"
+        >
           {/* Giant Two-Line Editorial Headline */}
           <h1
             className={`text-4xl sm:text-5xl md:text-6xl lg:text-[66px] font-normal tracking-[-0.03em] text-[#F1F5F9] leading-[1.02] max-w-3xl ${

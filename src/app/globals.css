@@ -431,3 +431,15 @@ html[data-theme="light"] .codos-service-cloud-orb-3 {
 html[data-theme="light"] .codos-service-cloud-orb-2 {
   background: radial-gradient(circle, rgba(255, 255, 255, 0.75) 0%, transparent 72%) !important;
 }
+
+.codos-cloud-float-1 > article {
+  animation: cloudCardFloat 5.5s ease-in-out infinite;
+}
+
+.codos-cloud-float-2 > article {
+  animation: cloudCardFloat 6.2s ease-in-out -1.8s infinite;
+}
+
+.codos-cloud-float-3 > article {
+  animation: cloudCardFloat 5.8s ease-in-out -3.4s infinite;
+}

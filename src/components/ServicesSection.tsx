@@ -168,7 +168,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
         <ScrollCloudReveal
           direction="left"
           delayMs={50}
-          className="h-full flex flex-col"
+          className="h-full flex flex-col codos-cloud-float-1"
         >
         <Parallax3DServiceCard
           id="voice-service"
@@ -288,7 +288,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
         <ScrollCloudReveal
           direction="scale"
           delayMs={180}
-          className="h-full flex flex-col"
+          className="h-full flex flex-col codos-cloud-float-2"
         >
         <Parallax3DServiceCard
           id="api-service"
@@ -427,7 +427,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
         <ScrollCloudReveal
           direction="right"
           delayMs={310}
-          className="h-full flex flex-col"
+          className="h-full flex flex-col codos-cloud-float-3"
         >
         <Parallax3DServiceCard
           id="llm-service"
