@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { ViaCodosLogo } from "./ViaCodosLogo";
+import { SkyBeakAiWorkspace, SkyBeakSubView } from "./SkyBeakAiWorkspace";
+import { CallColleagueWorkspace } from "./CallColleagueWorkspace";
 import {
   LayoutDashboard,
   PhoneCall,
@@ -23,19 +25,356 @@ import {
   Sparkles,
   Sun,
   Moon,
+  Search,
+  Code2,
+  Terminal,
+  Layers,
+  Building2,
+  MessageSquare,
+  UploadCloud,
 } from "lucide-react";
 
 interface InteractiveConsoleDashboardProps {
+  initialTab?: "overview" | "voice" | "api" | "llm" | "analytics" | "billing";
   onReturnToLanding?: () => void;
 }
 
+interface ApiEndpointItem {
+  id: string;
+  category: "voice" | "gateway" | "llm" | "billing";
+  categoryLabel: string;
+  name: string;
+  method: "POST" | "GET" | "WSS" | "DELETE";
+  path: string;
+  description: string;
+  scope: string;
+  latency: string;
+  rateLimit: string;
+  version: string;
+  sampleRequest: string;
+  sampleResponse: string;
+}
+
+const CATEGORIZED_API_CATALOG: ApiEndpointItem[] = [
+  // Category 1: Call Colleague & Voice Telephony APIs
+  {
+    id: "voice-dispatch",
+    category: "voice",
+    categoryLabel: "Call Colleague & Telephony APIs",
+    name: "Dispatch Autonomous Voice Colleague",
+    method: "POST",
+    path: "/v1/voice/colleague/dispatch",
+    description:
+      "Initiates an outbound or inbound SIP/PSTN call handled by a low-latency AI Call Colleague persona with custom context.",
+    scope: "voice:dispatch",
+    latency: "72ms",
+    rateLimit: "10,000 req/s",
+    version: "v1.4",
+    sampleRequest: `{
+  "recipient_phone": "+15550198273",
+  "persona": "eleanor_executive",
+  "sip_trunk_id": "trunk_us_east_01",
+  "record_call": true
+}`,
+    sampleResponse: `{
+  "status": 200,
+  "session_id": "call_col_98f2a10b",
+  "state": "connected",
+  "edge_latency_ms": 72
+}`,
+  },
+  {
+    id: "voice-stream",
+    category: "voice",
+    categoryLabel: "Call Colleague & Telephony APIs",
+    name: "Bi-Directional Neural Audio Stream",
+    method: "WSS",
+    path: "wss://stream.viacodos.com/v1/voice/realtime",
+    description:
+      "Full-duplex 48kHz WebRTC & WebSocket audio stream with sub-80ms turn-taking and automatic barge-in interruption handling.",
+    scope: "voice:stream",
+    latency: "38ms",
+    rateLimit: "25,000 concurrent",
+    version: "v1.4",
+    sampleRequest: `{
+  "event": "media.stream.start",
+  "codec": "pcm_48000",
+  "vad_sensitivity": 0.85
+}`,
+    sampleResponse: `{
+  "event": "media.stream.ack",
+  "stream_id": "strm_77c190a",
+  "jitter_buffer_ms": 12
+}`,
+  },
+  {
+    id: "voice-transcripts",
+    category: "voice",
+    categoryLabel: "Call Colleague & Telephony APIs",
+    name: "Fetch Call Transcript & Sentiment",
+    method: "GET",
+    path: "/v1/voice/calls/{session_id}/transcript",
+    description:
+      "Retrieves speaker-diarized call transcriptions, CSAT sentiment scores, and structured action items extracted post-call.",
+    scope: "voice:read",
+    latency: "19ms",
+    rateLimit: "30,000 req/s",
+    version: "v1.2",
+    sampleRequest: `GET /v1/voice/calls/call_col_98f2a10b/transcript`,
+    sampleResponse: `{
+  "session_id": "call_col_98f2a10b",
+  "duration_sec": 142,
+  "csat_score": 0.99,
+  "resolution": "appointment_confirmed"
+}`,
+  },
+
+  // Category 2: Thumbs Up API Gateway & Security APIs
+  {
+    id: "gateway-rotate",
+    category: "gateway",
+    categoryLabel: "Thumbs Up Gateway & Security APIs",
+    name: "Zero-Downtime Cryptographic Key Rotation",
+    method: "POST",
+    path: "/v1/gateway/keys/rotate",
+    description:
+      "Atomically rotates master or scoped API keys with configurable grace windows and fine-grained RBAC permission scopes.",
+    scope: "api:admin",
+    latency: "11ms",
+    rateLimit: "50,000 req/s",
+    version: "v1.5",
+    sampleRequest: `{
+  "key_id": "key_prod_99f4",
+  "grace_period_seconds": 3600,
+  "scopes": ["voice:dispatch", "api:all", "llm:route"]
+}`,
+    sampleResponse: `{
+  "status": "rotated",
+  "new_key_prefix": "codos_live_prod_88e1...44c9",
+  "old_key_expires_in": 3600
+}`,
+  },
+  {
+    id: "gateway-ratelimit",
+    category: "gateway",
+    categoryLabel: "Thumbs Up Gateway & Security APIs",
+    name: "Configure Token-Bucket Rate Limiter",
+    method: "POST",
+    path: "/v1/gateway/policies/ratelimit",
+    description:
+      "Enforces edge DDoS protection, burst quotas, and per-tenant token bucket throttling across 38 global edge PoPs.",
+    scope: "api:write",
+    latency: "9ms",
+    rateLimit: "50,000 req/s",
+    version: "v1.5",
+    sampleRequest: `{
+  "service": "thumbs_up_api",
+  "requests_per_second": 50000,
+  "burst_capacity": 75000,
+  "action_on_exceed": "queue_or_429"
+}`,
+    sampleResponse: `{
+  "policy_id": "pol_edge_5501",
+  "propagated_pops": 38,
+  "active": true
+}`,
+  },
+  {
+    id: "gateway-webhooks",
+    category: "gateway",
+    categoryLabel: "Thumbs Up Gateway & Security APIs",
+    name: "Register Signed Webhook Endpoint",
+    method: "POST",
+    path: "/v1/gateway/webhooks/endpoints",
+    description:
+      "Subscribes an HTTPS URL to real-time voice, gateway, and LLM lifecycle events with HMAC-SHA256 replay protection.",
+    scope: "api:webhooks",
+    latency: "14ms",
+    rateLimit: "25,000 req/s",
+    version: "v1.3",
+    sampleRequest: `{
+  "url": "https://api.enterprise.com/webhooks/codos",
+  "events": ["call.completed", "llm.failover", "key.rotated"],
+  "signing_alg": "hmac-sha256"
+}`,
+    sampleResponse: `{
+  "webhook_id": "wh_live_309a",
+  "signing_secret": "whsec_codos_991a8f...",
+  "verified": true
+}`,
+  },
+  {
+    id: "gateway-revoke",
+    category: "gateway",
+    categoryLabel: "Thumbs Up Gateway & Security APIs",
+    name: "Instant API Key Revocation",
+    method: "DELETE",
+    path: "/v1/gateway/keys/{key_id}",
+    description:
+      "Immediately invalidates a compromised or retired API key across all global edge caches in under 50 milliseconds.",
+    scope: "api:admin",
+    latency: "8ms",
+    rateLimit: "50,000 req/s",
+    version: "v1.5",
+    sampleRequest: `DELETE /v1/gateway/keys/key_stg_11a8`,
+    sampleResponse: `{
+  "revoked": true,
+  "key_id": "key_stg_11a8",
+  "edge_purge_ms": 18
+}`,
+  },
+
+  // Category 3: Sky Beak LLM & Smart Routing APIs
+  {
+    id: "llm-completions",
+    category: "llm",
+    categoryLabel: "Sky Beak LLM & Smart Routing APIs",
+    name: "Unified Multi-Model Chat Completion",
+    method: "POST",
+    path: "/v1/llm/chat/completions",
+    description:
+      "Routes prompts across Claude 3.5 Sonnet, GPT-4o, Gemini 1.5 Pro, and Llama 3.3 with automatic zero-downtime failover.",
+    scope: "llm:route",
+    latency: "142ms",
+    rateLimit: "40,000 req/s",
+    version: "v1.6",
+    sampleRequest: `{
+  "primary_model": "claude-3-5-sonnet",
+  "fallback_models": ["gpt-4o", "gemini-1-5-pro"],
+  "routing_strategy": "lowest-latency",
+  "semantic_cache": true,
+  "messages": [{ "role": "user", "content": "Summarize incident #402" }]
+}`,
+    sampleResponse: `{
+  "id": "skybeak_cmpl_8821",
+  "routed_model": "claude-3-5-sonnet",
+  "cache_hit": true,
+  "tokens_saved": 410,
+  "latency_ms": 62
+}`,
+  },
+  {
+    id: "llm-embeddings",
+    category: "llm",
+    categoryLabel: "Sky Beak LLM & Smart Routing APIs",
+    name: "High-Dimensional Vector Embeddings",
+    method: "POST",
+    path: "/v1/llm/embeddings",
+    description:
+      "Generates normalized 1536 or 3072-dimension embeddings for RAG knowledge bases and real-time Call Colleague memory lookup.",
+    scope: "llm:read",
+    latency: "28ms",
+    rateLimit: "60,000 req/s",
+    version: "v1.4",
+    sampleRequest: `{
+  "model": "sky-beak-embed-v3",
+  "dimensions": 1536,
+  "input": "Enterprise SLA refund & escalation policy"
+}`,
+    sampleResponse: `{
+  "object": "list",
+  "dimensions": 1536,
+  "embedding_preview": [0.0214, -0.0481, 0.0912, "..."],
+  "latency_ms": 28
+}`,
+  },
+  {
+    id: "llm-cache",
+    category: "llm",
+    categoryLabel: "Sky Beak LLM & Smart Routing APIs",
+    name: "Semantic Prompt Cache Analytics",
+    method: "GET",
+    path: "/v1/llm/cache/metrics",
+    description:
+      "Returns real-time semantic cache hit ratios, token cost reductions, and similarity thresholds across your organization.",
+    scope: "llm:read",
+    latency: "12ms",
+    rateLimit: "50,000 req/s",
+    version: "v1.4",
+    sampleRequest: `GET /v1/llm/cache/metrics?window=24h`,
+    sampleResponse: `{
+  "cache_hit_ratio": 0.442,
+  "tokens_cached_24h": "6.18M",
+  "estimated_savings_usd": 184.50
+}`,
+  },
+
+  // Category 4: Telemetry & Unified Billing APIs
+  {
+    id: "billing-usage",
+    category: "billing",
+    categoryLabel: "Telemetry & Unified Billing APIs",
+    name: "Consolidated Cross-Service Usage Metering",
+    method: "GET",
+    path: "/v1/billing/usage/unified",
+    description:
+      "Aggregates Call Colleague minutes, Thumbs Up API request volume, and Sky Beak LLM token spend under a single master account.",
+    scope: "billing:read",
+    latency: "15ms",
+    rateLimit: "20,000 req/s",
+    version: "v1.2",
+    sampleRequest: `GET /v1/billing/usage/unified?period=2026-11`,
+    sampleResponse: `{
+  "account_id": "org_viacodos_ent",
+  "voice_minutes": 1840,
+  "api_requests": 2840000,
+  "llm_tokens": 14200000,
+  "total_spend_usd": 380.40
+}`,
+  },
+  {
+    id: "billing-alerts",
+    category: "billing",
+    categoryLabel: "Telemetry & Unified Billing APIs",
+    name: "Set Unified Quota & Spend Guardrails",
+    method: "POST",
+    path: "/v1/billing/quotas/guardrails",
+    description:
+      "Configures automated budget caps and Slack/webhook alerts across voice, API gateway, and LLM services to prevent overages.",
+    scope: "billing:write",
+    latency: "16ms",
+    rateLimit: "10,000 req/s",
+    version: "v1.2",
+    sampleRequest: `{
+  "monthly_cap_usd": 2500.00,
+  "soft_alert_threshold": 0.80,
+  "auto_throttle_non_critical": true
+}`,
+    sampleResponse: `{
+  "guardrail_id": "grd_9012",
+  "status": "armed",
+  "current_utilization": 0.152
+}`,
+  },
+];
+
 export const InteractiveConsoleDashboard: React.FC<
   InteractiveConsoleDashboardProps
-> = ({ onReturnToLanding }) => {
+> = ({ initialTab = "overview", onReturnToLanding }) => {
   const [activeTab, setActiveTab] = useState<
     "overview" | "voice" | "api" | "llm" | "analytics" | "billing"
-  >("overview");
+  >(initialTab);
+  const [skyBeakSubView, setSkyBeakSubView] =
+    useState<SkyBeakSubView>("models");
   const [isLightTheme, setIsLightTheme] = useState(false);
+
+  // Categorized API Services Filter State
+  const [selectedApiCategory, setSelectedApiCategory] = useState<
+    "all" | "voice" | "gateway" | "llm" | "billing"
+  >("all");
+  const [selectedHttpMethod, setSelectedHttpMethod] = useState<
+    "ALL" | "POST" | "GET" | "WSS" | "DELETE"
+  >("ALL");
+  const [apiSearchQuery, setApiSearchQuery] = useState("");
+  const [expandedApiId, setExpandedApiId] = useState<string | null>(
+    "gateway-rotate"
+  );
+  const [copiedEndpointId, setCopiedEndpointId] = useState<string | null>(null);
+  const [testedEndpointId, setTestedEndpointId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     const checkTheme = () => {
@@ -120,6 +459,17 @@ export const InteractiveConsoleDashboard: React.FC<
     setTimeout(() => setCopiedKeyId(null), 2000);
   };
 
+  const handleCopyEndpoint = (id: string, path: string) => {
+    navigator.clipboard.writeText(`https://api.viacodos.com${path}`);
+    setCopiedEndpointId(id);
+    setTimeout(() => setCopiedEndpointId(null), 2000);
+  };
+
+  const handleSimulateEndpoint = (id: string) => {
+    setTestedEndpointId(id);
+    setTimeout(() => setTestedEndpointId(null), 3000);
+  };
+
   const handleDeleteKey = (id: string) => {
     setApiKeys(apiKeys.filter((k) => k.id !== id));
   };
@@ -157,6 +507,68 @@ export const InteractiveConsoleDashboard: React.FC<
       );
     }, 1000);
   };
+
+  // Filtered API Catalog
+  const filteredApis = CATEGORIZED_API_CATALOG.filter((api) => {
+    const matchesCategory =
+      selectedApiCategory === "all" || api.category === selectedApiCategory;
+    const matchesMethod =
+      selectedHttpMethod === "ALL" || api.method === selectedHttpMethod;
+    const q = apiSearchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      api.name.toLowerCase().includes(q) ||
+      api.path.toLowerCase().includes(q) ||
+      api.description.toLowerCase().includes(q) ||
+      api.scope.toLowerCase().includes(q);
+    return matchesCategory && matchesMethod && matchesSearch;
+  });
+
+  const apiCategories = [
+    {
+      id: "all" as const,
+      label: "All API Services",
+      count: CATEGORIZED_API_CATALOG.length,
+      icon: Layers,
+      desc: "Complete unified catalog across Voice, Gateway, LLM & Billing",
+    },
+    {
+      id: "voice" as const,
+      label: "Call Colleague Voice APIs",
+      count: CATEGORIZED_API_CATALOG.filter((a) => a.category === "voice")
+        .length,
+      icon: PhoneCall,
+      desc: "SIP trunking, outbound AI voice dispatch, and real-time audio streams",
+    },
+    {
+      id: "gateway" as const,
+      label: "Thumbs Up Gateway APIs",
+      count: CATEGORIZED_API_CATALOG.filter((a) => a.category === "gateway")
+        .length,
+      icon: KeyRound,
+      desc: "Zero-trust cryptographic keys, rate limiting, and signed webhooks",
+    },
+    {
+      id: "llm" as const,
+      label: "Sky Beak LLM APIs",
+      count: CATEGORIZED_API_CATALOG.filter((a) => a.category === "llm").length,
+      icon: BrainCircuit,
+      desc: "Multi-model chat completions, vector embeddings, and semantic cache",
+    },
+    {
+      id: "billing" as const,
+      label: "Telemetry & Billing APIs",
+      count: CATEGORIZED_API_CATALOG.filter((a) => a.category === "billing")
+        .length,
+      icon: CreditCard,
+      desc: "Cross-service usage metering, spend guardrails, and invoices",
+    },
+  ];
+
+  const groupedCategoriesToDisplay =
+    selectedApiCategory === "all"
+      ? (["voice", "gateway", "llm", "billing"] as const)
+      : ([selectedApiCategory] as const);
 
   return (
     <div
@@ -219,7 +631,9 @@ export const InteractiveConsoleDashboard: React.FC<
           {/* Theme Toggle Button */}
           <button
             onClick={toggleTheme}
-            title={isLightTheme ? "Switch to Dark Theme" : "Switch to Light Theme"}
+            title={
+              isLightTheme ? "Switch to Dark Theme" : "Switch to Light Theme"
+            }
             className="codos-cta-btn w-8 h-8 rounded-full bg-[#14B8A6] text-[#0F172A] flex items-center justify-center shadow transition-all cursor-pointer"
             aria-label="Toggle Light/Dark Theme"
           >
@@ -288,11 +702,11 @@ export const InteractiveConsoleDashboard: React.FC<
                   id: "api",
                   label: "Thumbs Up API",
                   icon: KeyRound,
-                  badge: "50k/s",
+                  badge: "12 APIs",
                 },
                 {
                   id: "llm",
-                  label: "Sky Beak LLM",
+                  label: "SkyBeak AI Models",
                   icon: BrainCircuit,
                   badge: "Multi",
                 },
@@ -553,7 +967,7 @@ export const InteractiveConsoleDashboard: React.FC<
                               Thumbs Up API
                             </h3>
                             <span className="text-[10px] text-[#14B8A6] font-mono font-semibold">
-                              {apiKeys.length} Active API Keys
+                              12 Categorized APIs • {apiKeys.length} Keys
                             </span>
                           </div>
                         </div>
@@ -564,14 +978,14 @@ export const InteractiveConsoleDashboard: React.FC<
                         />
                       </div>
                       <p className="text-xs text-[#F1F5F9]/75 leading-relaxed">
-                        High-throughput secure developer API gateway, cryptographic signing &amp; rate limiting.
+                        High-throughput secure developer API gateway, categorized REST/WSS endpoints &amp; rate limiting.
                       </p>
                     </div>
                     <button
                       onClick={() => setActiveTab("api")}
                       className="codos-cta-btn w-full py-2.5 rounded-xl bg-[#14B8A6] hover:bg-[#0D9488] text-[#0F172A] text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <span>Manage API Gateway</span>
+                      <span>Open API Services Catalog</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -698,192 +1112,308 @@ export const InteractiveConsoleDashboard: React.FC<
               VIEW 2: AI CALL COLLEAGUE SERVICE TAB
              ======================================================== */}
           {activeTab === "voice" && (
-            <div className="space-y-8 animate-in fade-in duration-200">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-[#14B8A6]/15 text-[#14B8A6] border border-[#14B8A6]/35 text-xs font-semibold mb-2">
-                    <PhoneCall className="w-3.5 h-3.5" />
-                    <span>Telephony &amp; Conversational AI</span>
-                  </div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-[#F1F5F9]">
-                    Call Colleague Studio
-                  </h1>
-                  <p className="text-xs sm:text-sm text-[#F1F5F9]/75 mt-1">
-                    Manage autonomous voice agents, connect telephony SIP trunks, and test real-time speech.
-                  </p>
-                </div>
-              </div>
-
-              {/* Test Call Interactive Dialer */}
-              <div className="p-6 rounded-2xl glass-panel border border-[#14B8A6]/35 space-y-5">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base font-bold text-[#F1F5F9] flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-[#14B8A6]" />
-                    <span>Live Test Call Simulator</span>
-                  </h2>
-                  <span className="text-xs font-mono font-semibold text-[#14B8A6]">
-                    WebRTC &amp; SIP Ready
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-[#F1F5F9]/75">
-                      Recipient Phone Number
-                    </label>
-                    <input
-                      type="text"
-                      value={dialerNumber}
-                      onChange={(e) => setDialerNumber(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-[#F1F5F9]/15 text-xs font-mono text-[#F1F5F9] outline-none"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-[#F1F5F9]/75">
-                      Voice Persona
-                    </label>
-                    <select className="w-full px-3.5 py-2 rounded-xl bg-[#0F172A] border border-[#F1F5F9]/15 text-xs text-[#F1F5F9] outline-none">
-                      <option>Eleanor - Executive Support (Natural British)</option>
-                      <option>Marcus - Technical Specialist (Clear US)</option>
-                      <option>Aria - Warm Concierge (Empathetic)</option>
-                    </select>
-                  </div>
-
-                  <div className="flex items-end">
-                    <button
-                      onClick={handleTriggerTestCall}
-                      disabled={isCalling}
-                      className="codos-cta-btn w-full py-2.5 rounded-xl bg-[#14B8A6] hover:bg-[#0D9488] text-[#0F172A] text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer"
-                    >
-                      <PhoneForwarded className="w-4 h-4" />
-                      <span>
-                        {isCalling ? "Dialing..." : "Simulate Outbound Call"}
-                      </span>
-                    </button>
-                  </div>
-                </div>
-
-                {callStatus && (
-                  <div className="p-3 rounded-xl bg-black/40 border border-[#F1F5F9]/15 text-xs font-mono text-[#14B8A6] font-semibold flex items-center gap-2 animate-in fade-in">
-                    <span
-                      className={`w-2 h-2 rounded-full animate-pulse ${
-                        isLightTheme ? "bg-[#14213D]" : "bg-[#14B8A6]"
-                      }`}
-                    />
-                    <span>{callStatus}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Deployed Colleague List */}
-              <div className="space-y-4">
-                <h2 className="text-base font-bold text-[#F1F5F9]">
-                  Active Call Colleagues
-                </h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    {
-                      name: "Colleague #01 - Inbound Reception",
-                      persona: "Eleanor (Receptionist)",
-                      handled: "1,420 calls",
-                      latency: "72ms",
-                      csat: "99.2%",
-                    },
-                    {
-                      name: "Colleague #02 - VIP Incident Response",
-                      persona: "Marcus (Technical)",
-                      handled: "348 calls",
-                      latency: "79ms",
-                      csat: "98.8%",
-                    },
-                  ].map((agent, i) => (
-                    <div
-                      key={i}
-                      className="p-5 rounded-2xl glass-panel border border-[#F1F5F9]/12 space-y-3"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-9 h-9 rounded-xl bg-[#14B8A6]/15 flex items-center justify-center text-[#14B8A6]">
-                            <PhoneCall className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <h3 className="text-xs font-bold text-[#F1F5F9]">
-                              {agent.name}
-                            </h3>
-                            <p className="text-[10px] text-[#F1F5F9]/65">
-                              {agent.persona}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#14B8A6]/15 text-[#14B8A6]">
-                          Active
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[#F1F5F9]/10 text-[11px]">
-                        <div>
-                          <span className="text-[#F1F5F9]/60 block">
-                            Calls Handled
-                          </span>
-                          <span className="font-bold text-[#F1F5F9]">
-                            {agent.handled}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[#F1F5F9]/60 block">
-                            Avg Latency
-                          </span>
-                          <span className="font-bold text-[#14B8A6]">
-                            {agent.latency}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[#F1F5F9]/60 block">
-                            CSAT Score
-                          </span>
-                          <span className="font-bold text-[#14B8A6]">
-                            {agent.csat}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <CallColleagueWorkspace isLightTheme={isLightTheme} />
           )}
 
           {/* ========================================================
-              VIEW 3: THUMBS UP API GATEWAY TAB
+              VIEW 3: API SERVICES INTERFACE WITH CATEGORIZED LISTINGS
              ======================================================== */}
           {activeTab === "api" && (
             <div className="space-y-8 animate-in fade-in duration-200">
-              <div className="flex items-start justify-between">
+              {/* Top Header & Create Key CTA */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-[#14B8A6]/15 text-[#14B8A6] border border-[#14B8A6]/35 text-xs font-semibold mb-2">
+                  <div className="inline-flex items-center gap-2 text-[#14B8A6] text-xs font-semibold mb-1.5">
                     <KeyRound className="w-3.5 h-3.5" />
-                    <span>Developer Gateway &amp; Keys</span>
+                    <span>Thumbs Up API Gateway • Categorized API Services</span>
                   </div>
                   <h1 className="text-2xl sm:text-3xl font-bold text-[#F1F5F9]">
-                    Thumbs Up API Gateway
+                    API Services &amp; Categorized Directory
                   </h1>
                   <p className="text-xs sm:text-sm text-[#F1F5F9]/75 mt-1">
-                    Generate cryptographically signed API keys, set rate limits, and inspect real-time request metrics.
+                    Explore, filter, and test categorized REST &amp; WebSocket APIs across Call Colleague, Thumbs Up Gateway, Sky Beak LLM, and Unified Billing.
                   </p>
                 </div>
 
                 <button
                   onClick={() => setShowNewKeyModal(true)}
-                  className="codos-cta-btn px-4 py-2 rounded-xl bg-[#14B8A6] hover:bg-[#0D9488] text-[#0F172A] text-xs font-bold flex items-center gap-1.5 shadow-lg transition-all cursor-pointer"
+                  className="codos-cta-btn px-4 py-2.5 rounded-xl bg-[#14B8A6] hover:bg-[#0D9488] text-[#0F172A] text-xs font-bold flex items-center gap-1.5 shadow-lg transition-all cursor-pointer self-start sm:self-auto"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Create API Key</span>
                 </button>
               </div>
 
-              {/* API Keys Table */}
+              {/* Category Cards Selector Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                {apiCategories.map((cat) => {
+                  const Icon = cat.icon;
+                  const isSelected = selectedApiCategory === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      onClick={() => setSelectedApiCategory(cat.id)}
+                      className={`p-4 rounded-2xl text-left transition-all cursor-pointer border flex flex-col justify-between gap-2.5 ${
+                        isSelected
+                          ? "codos-cta-btn bg-[#14B8A6] text-[#0F172A] border-[#14B8A6] shadow-lg"
+                          : "glass-panel border-[#F1F5F9]/12 hover:border-[#14B8A6]/50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <Icon
+                          className={`w-4 h-4 ${
+                            isSelected ? "" : "text-[#14B8A6]"
+                          }`}
+                        />
+                        <span className="text-[11px] font-mono font-bold">
+                          {cat.count} APIs
+                        </span>
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold leading-snug">
+                          {cat.label}
+                        </div>
+                        <p
+                          className={`text-[10px] mt-1 line-clamp-2 leading-relaxed ${
+                            isSelected ? "opacity-85" : "text-[#F1F5F9]/65"
+                          }`}
+                        >
+                          {cat.desc}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Search & HTTP Method Filter Bar */}
+              <div className="p-4 rounded-2xl glass-panel border border-[#F1F5F9]/12 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-[#F1F5F9]/50 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search APIs by endpoint path (/v1/voice...), name, or scope..."
+                    value={apiSearchQuery}
+                    onChange={(e) => setApiSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 rounded-xl bg-black/40 border border-[#F1F5F9]/15 text-xs text-[#F1F5F9] outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1.5 overflow-x-auto">
+                  {(["ALL", "POST", "GET", "WSS", "DELETE"] as const).map(
+                    (method) => (
+                      <button
+                        key={method}
+                        onClick={() => setSelectedHttpMethod(method)}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-mono font-bold transition-all cursor-pointer ${
+                          selectedHttpMethod === method
+                            ? "codos-cta-btn bg-[#14B8A6] text-[#0F172A]"
+                            : "text-[#F1F5F9]/70 hover:text-[#F1F5F9] bg-[#F1F5F9]/5"
+                        }`}
+                      >
+                        {method}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+
+              {/* Categorized API Endpoint Listings */}
+              <div className="space-y-8">
+                {groupedCategoriesToDisplay.map((catKey) => {
+                  const categoryEndpoints = filteredApis.filter(
+                    (api) => api.category === catKey
+                  );
+                  if (categoryEndpoints.length === 0) return null;
+
+                  const categoryMeta = apiCategories.find(
+                    (c) => c.id === catKey
+                  );
+                  const CatIcon = categoryMeta?.icon || Code2;
+
+                  return (
+                    <div key={catKey} className="space-y-3.5">
+                      {/* Category Section Header */}
+                      <div className="flex items-center justify-between border-b border-[#F1F5F9]/12 pb-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <CatIcon className="w-4 h-4 text-[#14B8A6]" />
+                          <h2 className="text-base font-bold text-[#F1F5F9]">
+                            {categoryEndpoints[0].categoryLabel}
+                          </h2>
+                          <span className="text-xs font-mono font-semibold text-[#14B8A6]">
+                            ({categoryEndpoints.length})
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-[#F1F5F9]/60 hidden sm:inline">
+                          Base URL: <code className="font-mono">https://api.viacodos.com</code>
+                        </span>
+                      </div>
+
+                      {/* Endpoints List inside this Category */}
+                      <div className="grid grid-cols-1 gap-3.5">
+                        {categoryEndpoints.map((api) => {
+                          const isExpanded = expandedApiId === api.id;
+                          const isCopied = copiedEndpointId === api.id;
+                          const isTested = testedEndpointId === api.id;
+
+                          return (
+                            <div
+                              key={api.id}
+                              className="rounded-2xl glass-panel border border-[#F1F5F9]/12 hover:border-[#14B8A6]/45 transition-all overflow-hidden"
+                            >
+                              {/* Endpoint Summary Row */}
+                              <div className="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                                <div className="space-y-1.5 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2.5">
+                                    <span className="text-[11px] font-mono font-extrabold text-[#14B8A6]">
+                                      {api.method}
+                                    </span>
+                                    <code className="text-xs sm:text-sm font-mono font-bold text-[#F1F5F9]">
+                                      {api.path}
+                                    </code>
+                                    <button
+                                      onClick={() =>
+                                        handleCopyEndpoint(api.id, api.path)
+                                      }
+                                      className="inline-flex items-center gap-1 text-[10px] font-mono text-[#F1F5F9]/60 hover:text-[#14B8A6] cursor-pointer"
+                                      title="Copy full endpoint URL"
+                                    >
+                                      {isCopied ? (
+                                        <Check className="w-3 h-3 text-[#14B8A6]" />
+                                      ) : (
+                                        <Copy className="w-3 h-3" />
+                                      )}
+                                      <span>{isCopied ? "Copied" : "Copy"}</span>
+                                    </button>
+                                    <span className="text-[10px] font-mono text-[#F1F5F9]/50">
+                                      {api.version}
+                                    </span>
+                                  </div>
+
+                                  <h3 className="text-sm font-bold text-[#F1F5F9]">
+                                    {api.name}
+                                  </h3>
+                                  <p className="text-xs text-[#F1F5F9]/75 leading-relaxed max-w-3xl">
+                                    {api.description}
+                                  </p>
+                                </div>
+
+                                {/* Right Metadata & Inspect Button */}
+                                <div className="flex flex-wrap sm:flex-nowrap items-center gap-4 lg:gap-5 justify-between lg:justify-end border-t lg:border-t-0 pt-3 lg:pt-0 border-[#F1F5F9]/10">
+                                  <div className="flex items-center gap-4 text-[11px] font-mono">
+                                    <div>
+                                      <span className="text-[#F1F5F9]/55 block text-[10px]">
+                                        Scope
+                                      </span>
+                                      <span className="font-bold text-[#14B8A6]">
+                                        {api.scope}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-[#F1F5F9]/55 block text-[10px]">
+                                        Avg Latency
+                                      </span>
+                                      <span className="font-bold text-[#F1F5F9]">
+                                        {api.latency}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-[#F1F5F9]/55 block text-[10px]">
+                                        Rate Limit
+                                      </span>
+                                      <span className="font-bold text-[#F1F5F9]">
+                                        {api.rateLimit}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    onClick={() =>
+                                      setExpandedApiId(
+                                        isExpanded ? null : api.id
+                                      )
+                                    }
+                                    className="codos-cta-btn px-3.5 py-2 rounded-xl bg-[#14B8A6] text-[#0F172A] text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
+                                  >
+                                    {isExpanded
+                                      ? "Hide Inspector"
+                                      : "Inspect & Test"}
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Expandable Request / Response Payload Inspector */}
+                              {isExpanded && (
+                                <div className="px-4 sm:px-5 pb-5 pt-3 border-t border-[#F1F5F9]/10 space-y-4 animate-in fade-in duration-150">
+                                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                    <div className="space-y-1.5">
+                                      <div className="flex items-center justify-between text-[11px] font-mono">
+                                        <span className="font-bold text-[#F1F5F9]">
+                                          Request Payload / Query
+                                        </span>
+                                        <span className="text-[#14B8A6]">
+                                          application/json
+                                        </span>
+                                      </div>
+                                      <pre className="p-3.5 rounded-xl bg-black/40 border border-[#F1F5F9]/12 text-[11px] font-mono text-[#F1F5F9] overflow-x-auto leading-relaxed">
+                                        <code>{api.sampleRequest}</code>
+                                      </pre>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                      <div className="flex items-center justify-between text-[11px] font-mono">
+                                        <span className="font-bold text-[#F1F5F9]">
+                                          200 OK Sample Response
+                                        </span>
+                                        <span className="text-[#14B8A6]">
+                                          Edge Verified ({api.latency})
+                                        </span>
+                                      </div>
+                                      <pre className="p-3.5 rounded-xl bg-black/40 border border-[#F1F5F9]/12 text-[11px] font-mono text-[#F1F5F9] overflow-x-auto leading-relaxed">
+                                        <code>{api.sampleResponse}</code>
+                                      </pre>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                                    <span className="text-[11px] font-mono text-[#F1F5F9]/65">
+                                      Auth Header:{" "}
+                                      <code>
+                                        Authorization: Bearer{" "}
+                                        {apiKeys[0]?.prefix || "codos_live_..."}
+                                      </code>
+                                    </span>
+
+                                    <div className="flex items-center gap-3">
+                                      {isTested && (
+                                        <span className="text-xs font-mono font-bold text-[#14B8A6]">
+                                          ✓ 200 OK • Response received in{" "}
+                                          {api.latency}
+                                        </span>
+                                      )}
+                                      <button
+                                        onClick={() =>
+                                          handleSimulateEndpoint(api.id)
+                                        }
+                                        className="codos-cta-btn px-4 py-2 rounded-xl bg-[#14B8A6] text-[#0F172A] text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                                      >
+                                        <Terminal className="w-3.5 h-3.5" />
+                                        <span>Send Live Test Request</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Active API Keys Table */}
               <div className="rounded-2xl glass-panel border border-[#F1F5F9]/12 overflow-hidden">
                 <div className="px-6 py-4 border-b border-[#F1F5F9]/10 flex items-center justify-between">
                   <h2 className="text-sm font-bold text-[#F1F5F9]">
@@ -905,7 +1435,7 @@ export const InteractiveConsoleDashboard: React.FC<
                           <span className="text-xs font-bold text-[#F1F5F9]">
                             {key.name}
                           </span>
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-[#14B8A6]/15 text-[#14B8A6]">
+                          <span className="text-[10px] font-mono font-bold text-[#14B8A6]">
                             {key.status}
                           </span>
                         </div>
@@ -943,116 +1473,22 @@ export const InteractiveConsoleDashboard: React.FC<
                   ))}
                 </div>
               </div>
-
-              {/* Endpoint Health & Rate Limits */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-xl glass-panel border border-[#F1F5F9]/12 space-y-1.5">
-                  <span className="text-[10px] font-mono font-bold text-[#14B8A6]">
-                    POST /v1/voice/colleague
-                  </span>
-                  <div className="text-lg font-bold font-mono text-[#F1F5F9]">
-                    18ms
-                  </div>
-                  <p className="text-[11px] font-medium text-[#14B8A6]">
-                    100% Availability
-                  </p>
-                </div>
-                <div className="p-4 rounded-xl glass-panel border border-[#F1F5F9]/12 space-y-1.5">
-                  <span className="text-[10px] font-mono font-bold text-[#14B8A6]">
-                    POST /v1/llm/route
-                  </span>
-                  <div className="text-lg font-bold font-mono text-[#F1F5F9]">
-                    142ms
-                  </div>
-                  <p className="text-[11px] font-medium text-[#14B8A6]">
-                    100% Availability
-                  </p>
-                </div>
-                <div className="p-4 rounded-xl glass-panel border border-[#F1F5F9]/12 space-y-1.5">
-                  <span className="text-[10px] font-mono font-bold text-[#14B8A6]">
-                    GET /v1/gateway/metrics
-                  </span>
-                  <div className="text-lg font-bold font-mono text-[#F1F5F9]">
-                    9ms
-                  </div>
-                  <p className="text-[11px] font-medium text-[#14B8A6]">
-                    100% Availability
-                  </p>
-                </div>
-              </div>
             </div>
           )}
 
           {/* ========================================================
-              VIEW 4: SKY BEAK LLM STUDIO TAB
+              VIEW 4: SKYBEAK AI SUITE (MODELS, INDUSTRY, CHATBOT & CUSTOM TRAINING)
              ======================================================== */}
           {activeTab === "llm" && (
-            <div className="space-y-8 animate-in fade-in duration-200">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-[#14B8A6]/15 text-[#14B8A6] border border-[#14B8A6]/35 text-xs font-semibold mb-2">
-                    <BrainCircuit className="w-3.5 h-3.5" />
-                    <span>Multi-Model AI Router</span>
-                  </div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-[#F1F5F9]">
-                    Sky Beak LLM &amp; Smart Router
-                  </h1>
-                  <p className="text-xs sm:text-sm text-[#F1F5F9]/75 mt-1">
-                    Route prompts dynamically between Claude, GPT-4o, and Gemini with auto-fallback and prompt caching.
-                  </p>
-                </div>
-              </div>
-
-              {/* Interactive Prompt Tester */}
-              <div className="p-6 rounded-2xl glass-panel border border-[#14B8A6]/35 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base font-bold text-[#F1F5F9] flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-[#14B8A6]" />
-                    <span>Prompt Router Playground</span>
-                  </h2>
-                  <span className="text-xs text-[#F1F5F9]/65">
-                    Primary: Claude 3.5 Sonnet • Fallback: GPT-4o
-                  </span>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-[#F1F5F9]/75">
-                    Test Prompt
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={playgroundPrompt}
-                    onChange={(e) => setPlaygroundPrompt(e.target.value)}
-                    className="w-full p-3 rounded-xl bg-black/40 border border-[#F1F5F9]/15 text-xs font-mono text-[#F1F5F9] outline-none"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-[#F1F5F9]/65 font-mono">
-                    Estimated tokens: ~45 • Cache savings: 42%
-                  </span>
-                  <button
-                    onClick={handleRunPlayground}
-                    disabled={isGenerating}
-                    className="codos-cta-btn px-5 py-2 rounded-xl bg-[#14B8A6] hover:bg-[#0D9488] text-[#0F172A] text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>{isGenerating ? "Routing..." : "Run Test Prompt"}</span>
-                  </button>
-                </div>
-
-                {llmOutput && (
-                  <div className="p-4 rounded-xl bg-black/40 border border-[#14B8A6]/35 space-y-2 animate-in fade-in">
-                    <span className="text-[10px] uppercase font-bold text-[#14B8A6]">
-                      Live Router Response
-                    </span>
-                    <pre className="text-xs font-mono text-[#F1F5F9] overflow-x-auto">
-                      <code>{llmOutput}</code>
-                    </pre>
-                  </div>
-                )}
-              </div>
-            </div>
+            <SkyBeakAiWorkspace
+              key={skyBeakSubView}
+              initialSubView={skyBeakSubView}
+              isLightTheme={isLightTheme}
+              onOpenApiCatalog={() => {
+                setSelectedApiCategory("llm");
+                setActiveTab("api");
+              }}
+            />
           )}
 
           {/* Fallback for analytics or billing tabs */}
