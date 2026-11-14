@@ -150,7 +150,10 @@ const CATEGORIZED_API_CATALOG: ApiEndpointItem[] = [
 }`,
     sampleResponse: `{
   "status": "rotated",
-  "new_key_prefix": "codos_live_prod_88e1...44c9",
+  "new_key_prefix": "${
+    process.env.NEXT_PUBLIC_CODOS_ROTATED_KEY_PREFIX ||
+    "$NEXT_PUBLIC_CODOS_ROTATED_KEY_PREFIX"
+  }",
   "old_key_expires_in": 3600
 }`,
   },
@@ -397,12 +400,14 @@ export const InteractiveConsoleDashboard: React.FC<
     localStorage.setItem("codos-theme", nextTheme);
   };
 
-  // API Key management state
+  // API Key management state (loaded from .env)
   const [apiKeys, setApiKeys] = useState([
     {
       id: "key-1",
       name: "Production Webhook Key",
-      prefix: "codos_live_prod_99f4...28a1",
+      prefix:
+        process.env.NEXT_PUBLIC_CODOS_PROD_KEY_PREFIX ||
+        "$NEXT_PUBLIC_CODOS_PROD_KEY_PREFIX",
       created: "2026-11-01",
       scopes: ["voice:dispatch", "api:all", "llm:route"],
       status: "active",
@@ -410,7 +415,9 @@ export const InteractiveConsoleDashboard: React.FC<
     {
       id: "key-2",
       name: "Staging Test Key",
-      prefix: "codos_test_stg_11a8...99d4",
+      prefix:
+        process.env.NEXT_PUBLIC_CODOS_STAGING_KEY_PREFIX ||
+        "$NEXT_PUBLIC_CODOS_STAGING_KEY_PREFIX",
       created: "2026-11-10",
       scopes: ["voice:read", "api:read", "llm:read"],
       status: "active",
@@ -435,12 +442,14 @@ export const InteractiveConsoleDashboard: React.FC<
 
   const handleGenerateKey = () => {
     if (!newKeyName.trim()) return;
+    const keyPrefix =
+      process.env.NEXT_PUBLIC_CODOS_GENERATED_KEY_PREFIX || "codos_env_key";
     const newKey = {
       id: `key-${Date.now()}`,
       name: newKeyName,
-      prefix: `codos_live_${Math.random().toString(36).substring(2, 8)}...${Math.random()
+      prefix: `${keyPrefix}_${Math.random()
         .toString(36)
-        .substring(2, 6)}`,
+        .substring(2, 8)}...${Math.random().toString(36).substring(2, 6)}`,
       created: "2026-11-14",
       scopes:
         newKeyScope === "all"

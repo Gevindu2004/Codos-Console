@@ -100,7 +100,7 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
   const [selectedModel, setSelectedModel] = useState("claude-3-5-sonnet");
 
   const sampleCurl = `curl -X POST https://api.viacodos.com/v1/gateway/keys/rotate \\
-  -H "Authorization: Bearer codos_admin_44b..." \\
+  -H "Authorization: Bearer $CODOS_ADMIN_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"service":"thumbs_up_api","rate_limit_rpm":60000}'`;
 

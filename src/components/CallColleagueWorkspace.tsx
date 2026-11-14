@@ -115,26 +115,43 @@ const INITIAL_TRAINING_FILES: VoiceTrainingFile[] = [
   },
 ];
 
+const ENV_API_BASE_URL =
+  process.env.NEXT_PUBLIC_CODOS_API_BASE_URL || "https://api.viacodos.com";
+const ENV_STREAM_WSS_URL =
+  process.env.NEXT_PUBLIC_CODOS_STREAM_WSS_URL ||
+  "wss://stream.viacodos.com/v1";
+const ENV_CC_KEY_PREFIX =
+  process.env.NEXT_PUBLIC_CALL_COLLEAGUE_KEY_PREFIX || "cc_env_voice";
+const ENV_CC_WEBHOOK_URL =
+  process.env.NEXT_PUBLIC_CALL_COLLEAGUE_WEBHOOK_URL ||
+  "https://api.viacodos.com/v1/webhooks/voice-events";
+
 const INITIAL_COLLEAGUE_KEYS: ColleagueApiKey[] = [
   {
     id: "cc_key_1",
     name: "Inbound Reception SIP & Dispatch Key",
     colleagueId: "col_inbound_01",
     colleagueName: "Colleague #01 - Inbound Reception",
-    keySecret: "cc_live_voice_94a8f21e77c04b19",
+    keySecret:
+      process.env.NEXT_PUBLIC_CALL_COLLEAGUE_PRIMARY_KEY ||
+      "$NEXT_PUBLIC_CALL_COLLEAGUE_PRIMARY_KEY",
     scopes: ["voice:outbound-dispatch", "voice:inbound-sip", "voice:webrtc-stream"],
-    webhookUrl: "https://api.viacodos.com/v1/webhooks/voice-events",
-    created: "Active • Primary",
+    webhookUrl: ENV_CC_WEBHOOK_URL,
+    created: "Loaded from .env • Primary",
   },
   {
     id: "cc_key_2",
     name: "VIP Incident Escalation Trigger Key",
     colleagueId: "col_vip_02",
     colleagueName: "Colleague #02 - VIP Incident Response",
-    keySecret: "cc_live_voice_31d9c08a42e51f88",
+    keySecret:
+      process.env.NEXT_PUBLIC_CALL_COLLEAGUE_VIP_KEY ||
+      "$NEXT_PUBLIC_CALL_COLLEAGUE_VIP_KEY",
     scopes: ["voice:outbound-dispatch", "voice:live-transfer"],
-    webhookUrl: "https://incident.enterprise.io/hooks/codos-call",
-    created: "2 days ago",
+    webhookUrl:
+      process.env.NEXT_PUBLIC_CALL_COLLEAGUE_VIP_WEBHOOK_URL ||
+      "https://incident.enterprise.io/hooks/codos-call",
+    created: "Loaded from .env",
   },
 ];
 
@@ -331,7 +348,7 @@ export const CallColleagueWorkspace: React.FC<CallColleagueWorkspaceProps> = ({
     const randomHex = Array.from({ length: 16 }, () =>
       Math.floor(Math.random() * 16).toString(16)
     ).join("");
-    const generatedSecret = `cc_live_voice_${randomHex}`;
+    const generatedSecret = `${ENV_CC_KEY_PREFIX}_${randomHex}`;
 
     const newKeyEntry: ColleagueApiKey = {
       id: `cc_key_${Date.now()}`,
@@ -345,7 +362,7 @@ export const CallColleagueWorkspace: React.FC<CallColleagueWorkspaceProps> = ({
           ? selectedScopes
           : ["voice:outbound-dispatch"],
       webhookUrl:
-        webhookUrl.trim() || "https://api.enterprise.com/webhooks/call-colleague",
+        webhookUrl.trim() || ENV_CC_WEBHOOK_URL,
       created: "Just now",
     };
 
@@ -364,9 +381,9 @@ export const CallColleagueWorkspace: React.FC<CallColleagueWorkspaceProps> = ({
     if (sdkLang === "TS") {
       return `import { CodosVoiceClient } from "@viacodos/call-colleague-sdk";
 
-// Provisioned for: ${colName}
+// Provisioned for: ${colName} (Key loaded from .env)
 const colleague = new CodosVoiceClient({
-  apiKey: "${lastGeneratedKey}",
+  apiKey: process.env.CALL_COLLEAGUE_API_KEY,
   colleagueId: "${colId}",
   scopes: [${selectedScopes.map((s) => `"${s}"`).join(", ")}],
 });
@@ -382,11 +399,12 @@ console.log("Call Colleague Connected:", session.sessionId, session.edgeLatencyM
     }
 
     if (sdkLang === "PY") {
-      return `from viacodos import CallColleagueClient
+      return `import os
+from viacodos import CallColleagueClient
 
-# Provisioned for: ${colName}
+# Provisioned for: ${colName} (Key loaded from .env)
 client = CallColleagueClient(
-    api_key="${lastGeneratedKey}",
+    api_key=os.getenv("CALL_COLLEAGUE_API_KEY"),
     colleague_id="${colId}"
 )
 
@@ -396,12 +414,12 @@ session = client.calls.dispatch(
     speaking_rate=${speakingRate},
     webhook_url="${webhookUrl}"
 )
-print(f"Dispatched {session.colleague_id} ->Session: {session.id}")`;
+print(f"Dispatched {session.colleague_id} -> Session: {session.id}")`;
     }
 
     if (sdkLang === "CURL") {
-      return `curl -X POST https://api.viacodos.com/v1/voice/colleague/dispatch \\
-  -H "Authorization: Bearer ${lastGeneratedKey}" \\
+      return `curl -X POST ${ENV_API_BASE_URL}/v1/voice/colleague/dispatch \\
+  -H "Authorization: Bearer $CALL_COLLEAGUE_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "colleague_id": "${colId}",
@@ -418,11 +436,12 @@ print(f"Dispatched {session.colleague_id} ->Session: {session.id}")`;
 import (
     "context"
     "fmt"
+    "os"
     "github.com/viacodos/codos-go/voice"
 )
 
 func main() {
-    client := voice.NewColleagueClient("${lastGeneratedKey}")
+    client := voice.NewColleagueClient(os.Getenv("CALL_COLLEAGUE_API_KEY"))
     res, _ := client.Dispatch(context.Background(), &voice.DispatchRequest{
         ColleagueID:    "${colId}",
         RecipientPhone: "${dialerNumber}",
@@ -1271,29 +1290,38 @@ func main() {
                 </pre>
 
                 {/* Live Endpoint Metadata Summary */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2">
-                  <div className="p-3 rounded-xl bg-black/40 border border-[#F1F5F9]/10">
-                    <span className="text-[10px] text-[#F1F5F9]/60 block">
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-2.5 pt-2">
+                  <div className="p-3 rounded-xl bg-black/40 border border-[#F1F5F9]/10 min-w-0 overflow-hidden space-y-0.5">
+                    <span className="text-[10px] text-[#F1F5F9]/60 block truncate">
                       REST Dispatch Endpoint
                     </span>
-                    <span className="text-xs font-mono font-bold text-[#14B8A6]">
+                    <span
+                      title="/v1/voice/colleague/dispatch"
+                      className="text-[11px] font-mono font-bold text-[#14B8A6] block truncate"
+                    >
                       /v1/voice/colleague/dispatch
                     </span>
                   </div>
-                  <div className="p-3 rounded-xl bg-black/40 border border-[#F1F5F9]/10">
-                    <span className="text-[10px] text-[#F1F5F9]/60 block">
+                  <div className="p-3 rounded-xl bg-black/40 border border-[#F1F5F9]/10 min-w-0 overflow-hidden space-y-0.5">
+                    <span className="text-[10px] text-[#F1F5F9]/60 block truncate">
                       Duplex WebSocket Stream
                     </span>
-                    <span className="text-xs font-mono font-bold text-[#F1F5F9]">
-                      wss://stream.viacodos.com/v1
+                    <span
+                      title={ENV_STREAM_WSS_URL}
+                      className="text-[11px] font-mono font-bold text-[#F1F5F9] block truncate"
+                    >
+                      {ENV_STREAM_WSS_URL}
                     </span>
                   </div>
-                  <div className="p-3 rounded-xl bg-black/40 border border-[#F1F5F9]/10">
-                    <span className="text-[10px] text-[#F1F5F9]/60 block">
-                      Active Voice Key
+                  <div className="p-3 rounded-xl bg-black/40 border border-[#F1F5F9]/10 min-w-0 overflow-hidden space-y-0.5">
+                    <span className="text-[10px] text-[#F1F5F9]/60 block truncate">
+                      Active Voice Key (.env)
                     </span>
-                    <span className="text-xs font-mono font-bold text-[#14B8A6] truncate block">
-                      {lastGeneratedKey.slice(0, 18)}...
+                    <span
+                      title={lastGeneratedKey}
+                      className="text-[11px] font-mono font-bold text-[#14B8A6] block truncate"
+                    >
+                      {lastGeneratedKey}
                     </span>
                   </div>
                 </div>
@@ -1322,3 +1350,4 @@ func main() {
     </div>
   );
 };
+

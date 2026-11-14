@@ -231,7 +231,7 @@ call = codos.voice.dispatch_colleague(
 
 print(f"Colleague connected: {call.session_id} on Thumbs Up Gateway")`,
     curl: `curl -X POST https://api.viacodos.com/v1/orchestrate/unified \\
-  -H "Authorization: Bearer codos_live_prod_898f21a..." \\
+  -H "Authorization: Bearer $CODOS_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "services": ["llm", "voice", "thumbs_up_api"],

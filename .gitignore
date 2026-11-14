@@ -17,8 +17,14 @@
 .env.production.local
 .dev.vars
 .vars
-!.env.example
-!.env.template
+env.ts
+**/env.ts
+src/config/env.ts
+*env.ts
+*env.js
+*env.mjs
+envConfig.ts
+envConfig.js
 
 # =====================================================================
 # 2. CRYPTOGRAPHIC KEYS, CERTIFICATES, TOKENS & CREDENTIALS
