@@ -14,6 +14,7 @@ export const ViaCodosLogo: React.FC<ViaCodosLogoProps> = ({
   variant = "dark-bg",
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const loadedImageRef = useRef<HTMLImageElement | null>(null);
   const [processedReady, setProcessedReady] = useState(false);
   const [isLightTheme, setIsLightTheme] = useState(false);
 
@@ -24,9 +25,19 @@ export const ViaCodosLogo: React.FC<ViaCodosLogoProps> = ({
   }[size];
 
   useEffect(() => {
-    const checkTheme = () => {
+    const resolveIsLight = () => {
       const currentTheme = document.documentElement.getAttribute("data-theme");
-      setIsLightTheme(currentTheme === "light");
+      if (currentTheme === "light") return true;
+      if (currentTheme === "dark") return false;
+      try {
+        return window.localStorage.getItem("codos-theme") === "light";
+      } catch {
+        return false;
+      }
+    };
+
+    const checkTheme = () => {
+      setIsLightTheme(resolveIsLight());
     };
     checkTheme();
 
@@ -40,12 +51,16 @@ export const ViaCodosLogo: React.FC<ViaCodosLogoProps> = ({
 
   useEffect(() => {
     if (variant !== "dark-bg") return;
-    const img = new window.Image();
-    img.crossOrigin = "anonymous";
-    img.src = "/assets/via-codos-logo.jpg";
-    img.onload = () => {
+    let cancelled = false;
+
+    const renderToCanvas = (img: HTMLImageElement) => {
+      if (cancelled) return;
       const canvas = canvasRef.current;
       if (!canvas) return;
+
+      const currentTheme = document.documentElement.getAttribute("data-theme");
+      const activeLightTheme =
+        currentTheme === "light" ? true : currentTheme === "dark" ? false : isLightTheme;
 
       const srcX = Math.floor(img.width * 0.055);
       const srcY = Math.floor(img.height * 0.34);
@@ -58,6 +73,7 @@ export const ViaCodosLogo: React.FC<ViaCodosLogoProps> = ({
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
+      ctx.clearRect(0, 0, srcW, srcH);
       ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH);
       const imageData = ctx.getImageData(0, 0, srcW, srcH);
       const data = imageData.data;
@@ -86,7 +102,7 @@ export const ViaCodosLogo: React.FC<ViaCodosLogoProps> = ({
           data[i + 2] = 234;
           data[i + 3] = Math.round(alpha * 255);
         } else if (luminance < 0.55) {
-          if (isLightTheme) {
+          if (activeLightTheme) {
             // In Light Theme (Cream #F4EDE0 primary): render text in Midnight Black #0B0B0C (11, 11, 12)
             data[i] = 11;
             data[i + 1] = 11;
@@ -99,15 +115,35 @@ export const ViaCodosLogo: React.FC<ViaCodosLogoProps> = ({
           }
           data[i + 3] = Math.round(alpha * 255);
         } else {
-          data[i] = isLightTheme ? 11 : 203;
-          data[i + 1] = isLightTheme ? 11 : 213;
-          data[i + 2] = isLightTheme ? 12 : 225;
-          data[i + 3] = Math.round(alpha * 220);
+          data[i] = activeLightTheme ? 11 : 203;
+          data[i + 1] = activeLightTheme ? 11 : 213;
+          data[i + 2] = activeLightTheme ? 12 : 225;
+          data[i + 3] = Math.round(alpha * (activeLightTheme ? 255 : 220));
         }
       }
 
       ctx.putImageData(imageData, 0, 0);
       setProcessedReady(true);
+    };
+
+    if (loadedImageRef.current?.complete && loadedImageRef.current.naturalWidth > 0) {
+      renderToCanvas(loadedImageRef.current);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.src = "/assets/via-codos-logo.jpg";
+    img.onload = () => {
+      if (cancelled) return;
+      loadedImageRef.current = img;
+      renderToCanvas(img);
+    };
+
+    return () => {
+      cancelled = true;
     };
   }, [variant, isLightTheme]);
 

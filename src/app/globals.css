@@ -443,3 +443,119 @@ html[data-theme="light"] .codos-service-cloud-orb-2 {
 .codos-cloud-float-3 > article {
   animation: cloudCardFloat 5.8s ease-in-out -3.4s infinite;
 }
+
+/* =====================================================================
+   CALL COLLEAGUE WORKSPACE — FULL WHITE LIGHT THEME OVERRIDES
+   Applies when <html data-theme="light"> is active on Codos Console
+   ===================================================================== */
+html[data-theme="light"] .call-colleague-root [class*="bg-slate-900"],
+html[data-theme="light"] .call-colleague-root [class*="bg-slate-950"],
+html[data-theme="light"] .call-colleague-root [class*="bg-\[\#0B1221\]"],
+html[data-theme="light"] .call-colleague-root [class*="bg-\[\#070B14\]"],
+html[data-theme="light"] .call-colleague-root [class*="via-slate-900"] {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  background-image: none !important;
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.05) !important;
+}
+
+html[data-theme="light"] .call-colleague-root .bg-gradient-to-r.from-\[\#14B8A6\] {
+  background: #14213D !important;
+  background-color: #14213D !important;
+  background-image: none !important;
+}
+
+html[data-theme="light"] .call-colleague-root [class*="bg-slate-800"] {
+  background-color: #F1F5F9 !important;
+}
+
+html[data-theme="light"] .call-colleague-root [class*="hover\:bg-slate-800"]:hover,
+html[data-theme="light"] .call-colleague-root [class*="hover\:bg-slate-700"]:hover,
+html[data-theme="light"] .call-colleague-root [class*="hover\:bg-slate-900"]:hover {
+  background-color: #F8FAFC !important;
+}
+
+/* Modal overlay backdrop stays dimmed in light theme while dialog box is crisp white */
+html[data-theme="light"] .call-colleague-root .fixed.inset-0 {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+}
+html[data-theme="light"] .call-colleague-root .fixed.inset-0 > div {
+  background-color: #FFFFFF !important;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18) !important;
+}
+
+/* Selected / active outline containers in light theme */
+html[data-theme="light"] .call-colleague-root [class*="bg-\[\#14B8A6\]\/10"],
+html[data-theme="light"] .call-colleague-root [class*="bg-\[\#14B8A6\]\/12"],
+html[data-theme="light"] .call-colleague-root [class*="bg-\[\#14B8A6\]\/15"],
+html[data-theme="light"] .call-colleague-root [class*="bg-\[\#14B8A6\]\/20"] {
+  background-color: #F0F4FA !important;
+}
+
+/* Crisp Borders in White Theme */
+html[data-theme="light"] .call-colleague-root [class*="border-slate-800"],
+html[data-theme="light"] .call-colleague-root [class*="border-slate-700"],
+html[data-theme="light"] .call-colleague-root [class*="divide-slate-800"] > * + * {
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+/* Primary & Secondary Typography in White Theme */
+html[data-theme="light"] .call-colleague-root .text-white,
+html[data-theme="light"] .call-colleague-root .text-slate-100,
+html[data-theme="light"] .call-colleague-root .text-slate-200,
+html[data-theme="light"] .call-colleague-root .text-slate-300,
+html[data-theme="light"] .call-colleague-root .text-teal-100 {
+  color: #0B0B0C !important;
+}
+
+html[data-theme="light"] .call-colleague-root .text-slate-400,
+html[data-theme="light"] .call-colleague-root .text-slate-500 {
+  color: #475569 !important;
+}
+
+html[data-theme="light"] .call-colleague-root .text-\[\#2DD4BF\] {
+  color: #14213D !important;
+}
+
+html[data-theme="light"] .call-colleague-root input,
+html[data-theme="light"] .call-colleague-root select,
+html[data-theme="light"] .call-colleague-root option {
+  background-color: #FFFFFF !important;
+  color: #0B0B0C !important;
+  border-color: rgba(15, 23, 42, 0.18) !important;
+}
+
+html[data-theme="light"] .call-colleague-root input::placeholder {
+  color: #94A3B8 !important;
+}
+
+/* Keep solid primary buttons, step circles & icon badges crisp Navy #14213D with pure White #FFFFFF text/icons */
+html[data-theme="light"] .call-colleague-root .cc-solid-badge,
+html[data-theme="light"] .call-colleague-root div.bg-\[\#14B8A6\],
+html[data-theme="light"] .call-colleague-root button.bg-\[\#14B8A6\] {
+  background-color: #14213D !important;
+  border-color: #14213D !important;
+  color: #FFFFFF !important;
+}
+
+html[data-theme="light"] .call-colleague-root .cc-solid-badge *,
+html[data-theme="light"] .call-colleague-root div.bg-\[\#14B8A6\] *,
+html[data-theme="light"] .call-colleague-root button.bg-\[\#14B8A6\] * {
+  color: #FFFFFF !important;
+}
+
+/* Code blocks in Voice API Keys & SDK tab stay crisp light editor style */
+html[data-theme="light"] .call-colleague-root pre {
+  background-color: #F8FAFC !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  color: #0F172A !important;
+}
+html[data-theme="light"] .call-colleague-root pre .text-\[\#E2E8F0\] {
+  color: #14213D !important;
+}
+html[data-theme="light"] .call-colleague-root pre .text-\[\#14B8A6\] {
+  color: #059669 !important;
+}
+html[data-theme="light"] .call-colleague-root pre .text-\[\#93C5FD\] {
+  color: #0284C7 !important;
+}

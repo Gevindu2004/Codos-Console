@@ -117,6 +117,68 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
       window.removeEventListener("codos:highlight-service", handleHighlight);
   }, []);
 
+  const sampleGreeting =
+    "Hello! This is Eleanor from Codos Console. How may I assist your call?";
+
+  useEffect(() => {
+    return () => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  const handleToggleVoiceSample = () => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      setIsPlayingAudio((prev) => !prev);
+      return;
+    }
+
+    if (isPlayingAudio) {
+      window.speechSynthesis.cancel();
+      setIsPlayingAudio(false);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(sampleGreeting);
+    utterance.rate = 0.98;
+    utterance.pitch = 1.06;
+
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice =
+      voices.find(
+        (v) =>
+          v.lang.startsWith("en-GB") &&
+          (v.name.includes("Natural") ||
+            v.name.includes("Google") ||
+            v.name.includes("Libby") ||
+            v.name.includes("Sonia") ||
+            v.name.includes("Female"))
+      ) ||
+      voices.find(
+        (v) =>
+          v.lang.startsWith("en") &&
+          (v.name.includes("Natural") ||
+            v.name.includes("Google") ||
+            v.name.includes("Samantha") ||
+            v.name.includes("Victoria") ||
+            v.name.includes("Aria"))
+      ) ||
+      voices.find((v) => v.lang.startsWith("en"));
+
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    utterance.onstart = () => setIsPlayingAudio(true);
+    utterance.onend = () => setIsPlayingAudio(false);
+    utterance.onerror = () => setIsPlayingAudio(false);
+
+    setIsPlayingAudio(true);
+    window.speechSynthesis.speak(utterance);
+  };
+
   const sampleCurl = `curl -X POST https://api.viacodos.com/v1/gateway/keys/rotate \\
   -H "Authorization: Bearer $CODOS_ADMIN_API_KEY" \\
   -H "Content-Type: application/json" \\
@@ -241,9 +303,9 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
 
                 <div className="flex items-center gap-2.5">
                   <button
-                    onClick={() => setIsPlayingAudio(!isPlayingAudio)}
+                    onClick={handleToggleVoiceSample}
                     className="codos-cta-btn w-9 h-9 rounded-full bg-[#14B8A6] hover:bg-[#0D9488] text-[#0F172A] flex items-center justify-center shadow-md transition-all flex-shrink-0 cursor-pointer"
-                    aria-label="Play sample voice"
+                    aria-label={isPlayingAudio ? "Stop sample voice" : "Play sample voice"}
                   >
                     {isPlayingAudio ? (
                       <Pause className="w-3.5 h-3.5" />
@@ -253,11 +315,23 @@ export const ServicesSection: React.FC<ServicesSectionProps> = ({
                   </button>
                   <div className="flex-1 min-w-0">
                     <p className="text-[11px] font-medium text-[#F1F5F9] line-clamp-2">
-                      &quot;Hello! This is Eleanor from Codos Console. How may I assist your call?&quot;
+                      &quot;{sampleGreeting}&quot;
                     </p>
-                    <p className="text-[10px] text-[#F1F5F9]/50">
-                      {isPlayingAudio ? "Playing 48kHz neural stream..." : "Click play to listen"}
-                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-[10px] text-[#F1F5F9]/50">
+                        {isPlayingAudio
+                          ? "Speaking 48kHz neural stream..."
+                          : "Click play to listen"}
+                      </p>
+                      {isPlayingAudio && (
+                        <div className="flex items-end gap-0.5 h-3">
+                          <span className="w-0.5 bg-[#14B8A6] rounded-full wave-bar" style={{ animationDelay: "0ms" }} />
+                          <span className="w-0.5 bg-[#14B8A6] rounded-full wave-bar" style={{ animationDelay: "150ms" }} />
+                          <span className="w-0.5 bg-[#14B8A6] rounded-full wave-bar" style={{ animationDelay: "300ms" }} />
+                          <span className="w-0.5 bg-[#14B8A6] rounded-full wave-bar" style={{ animationDelay: "450ms" }} />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

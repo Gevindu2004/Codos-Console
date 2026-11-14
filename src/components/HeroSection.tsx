@@ -96,7 +96,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       style={{ perspective: "1400px" }}
-      className={`relative h-screen min-h-[640px] max-h-screen w-full flex flex-col justify-between pt-20 pb-5 overflow-hidden select-none transition-colors duration-500 ${
+      className={`relative min-h-dvh lg:h-dvh w-full flex flex-col justify-between pt-16 sm:pt-20 pb-5 sm:pb-6 overflow-hidden select-none transition-colors duration-500 ${
         isLightTheme ? "bg-[#F4EDE0]" : "bg-[#0F172A]"
       }`}
     >
@@ -196,12 +196,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
       {/* =====================================================================
           MAIN FULL-SCREEN STAGE (UPPER-RIGHT 3D CARD + LOWER HEADLINE & CTAs)
          ===================================================================== */}
-      <div className="relative z-20 flex-1 w-full px-6 sm:px-10 lg:px-12 flex flex-col justify-end pb-5">
+      <div className="relative z-20 flex-1 w-full px-6 sm:px-10 lg:px-12 flex flex-col justify-end pb-3 sm:pb-4">
         {/* UPPER-RIGHT FLOATING 3D PARALLAX FROSTED GLASS CARD */}
         <ScrollCloudReveal
           direction="right"
-          delayMs={120}
-          className="w-full flex justify-end lg:absolute lg:top-2 lg:right-12 lg:w-auto mb-4 lg:mb-0"
+          delayMs={40}
+          immediateOnMount={true}
+          className="w-full flex justify-end lg:absolute lg:top-1 lg:right-12 lg:w-auto mb-3 lg:mb-0"
         >
           <div
             style={{
@@ -352,7 +353,12 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
         </ScrollCloudReveal>
 
         {/* LOWER HERO HEADLINE + SUBCOPY (LEFT) & CTA BUTTONS (RIGHT) */}
-        <ScrollCloudReveal direction="up" delayMs={40} className="w-full">
+        <ScrollCloudReveal
+          direction="up"
+          delayMs={20}
+          immediateOnMount={true}
+          className="w-full"
+        >
         <div
           style={{
             transform: `translate3d(${mouse.x * -10}px, ${
@@ -363,7 +369,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
         >
           {/* Giant Two-Line Editorial Headline */}
           <h1
-            className={`text-4xl sm:text-5xl md:text-6xl lg:text-[66px] font-normal tracking-[-0.03em] text-[#F1F5F9] leading-[1.02] max-w-3xl ${
+            className={`text-4xl sm:text-5xl md:text-6xl lg:text-[58px] xl:text-[64px] font-normal tracking-[-0.03em] text-[#F1F5F9] leading-[1.02] max-w-3xl ${
               isLightTheme
                 ? "drop-shadow-[0_4px_16px_rgba(11,11,12,0.08)]"
                 : "drop-shadow-[0_8px_28px_rgba(0,0,0,0.35)]"
@@ -375,7 +381,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
           </h1>
 
           {/* Subcopy Row + Right-Aligned CTA Buttons */}
-          <div className="mt-4 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+          <div className="mt-3 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
             <p className="text-xs sm:text-sm text-[#F1F5F9]/85 max-w-lg leading-relaxed font-normal">
               Call Colleague, Thumbs Up API, and Sky Beak LLM unified in one enterprise
               console. No fragmented logins, no separate bills, just the master key under your account.
@@ -385,7 +391,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
             <div className="flex items-center gap-5 flex-shrink-0">
               <button
                 onClick={onOpenDashboard}
-                className={`codos-cta-btn inline-flex items-center gap-2 px-6 py-3 rounded-full text-xs sm:text-sm font-bold transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer ${
+                className={`codos-cta-btn inline-flex items-center gap-2 px-6 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-bold transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer ${
                   isLightTheme
                     ? "bg-[#14213D] hover:bg-[#0B0B0C] !text-[#FFFFFF] shadow-[0_10px_30px_rgba(20,33,61,0.32)]"
                     : "bg-[#14B8A6] hover:bg-[#0D9488] text-[#0F172A] shadow-[0_10px_30px_rgba(20,184,166,0.45)] hover:shadow-[0_14px_36px_rgba(20,184,166,0.65)]"
@@ -409,14 +415,16 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
       </div>
 
       {/* =====================================================================
-          LAYER 5: BOTTOM 5-COLUMN FEATURE BAR
+          LAYER 5: BOTTOM 5-COLUMN FEATURE BAR (FULLY VISIBLE ON WEBSITE OPEN)
          ===================================================================== */}
       <ScrollCloudReveal
         direction="up"
-        delayMs={220}
+        delayMs={60}
+        immediateOnMount={true}
+        threshold={0}
         className="relative z-20 w-full px-6 sm:px-10 lg:px-12 flex-shrink-0"
       >
-        <div className="border-t border-[#F1F5F9]/[0.16] grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 pt-3.5">
+        <div className="border-t border-[#F1F5F9]/[0.18] grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 pt-3 pb-1">
           {bottomFeatures.map((feat, idx) => {
             const Icon = feat.icon;
             const isHighlighted = activeBottomIndex === idx;
@@ -429,13 +437,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
                     ? isLightTheme
                       ? "text-[#14213D]"
                       : "text-[#14B8A6]"
-                    : "text-[#F1F5F9]/80 hover:text-[#F1F5F9]"
+                    : "text-[#F1F5F9]/90 hover:text-[#F1F5F9]"
                 }`}
               >
                 {/* Top Indicator Line */}
                 {isHighlighted && (
                   <div
-                    className={`absolute -top-[15px] left-0 right-4 h-[2.5px] ${
+                    className={`absolute -top-[13px] left-0 right-4 h-[2.5px] ${
                       isLightTheme
                         ? "bg-[#14213D] shadow-[0_0_12px_rgba(20,33,61,0.35)]"
                         : "bg-[#14B8A6] shadow-[0_0_12px_#14B8A6]"
@@ -444,12 +452,12 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
                 )}
 
                 <Icon
-                  className={`w-3.5 h-3.5 mb-1.5 ${
+                  className={`w-3.5 h-3.5 mb-1 ${
                     isHighlighted
                       ? isLightTheme
                         ? "text-[#14213D]"
                         : "text-[#14B8A6]"
-                      : "text-[#F1F5F9]/75"
+                      : "text-[#F1F5F9]/85"
                   }`}
                 />
                 <div className="text-[11px] sm:text-xs font-medium leading-snug">
@@ -460,7 +468,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenDashboard }) => 
                         ? isLightTheme
                           ? "text-[#14213D]/90"
                           : "text-[#14B8A6]/90"
-                        : "text-[#F1F5F9]/65"
+                        : "text-[#F1F5F9]/75"
                     }
                   >
                     {feat.line2}

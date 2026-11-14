@@ -8,6 +8,7 @@ interface ScrollCloudRevealProps {
   direction?: "up" | "left" | "right" | "scale";
   className?: string;
   threshold?: number;
+  immediateOnMount?: boolean;
 }
 
 /**
@@ -22,17 +23,26 @@ export const ScrollCloudReveal: React.FC<ScrollCloudRevealProps> = ({
   delayMs = 0,
   direction = "up",
   className = "",
-  threshold = 0.12,
+  threshold = 0.02,
+  immediateOnMount = false,
 }) => {
   const ref = useRef<HTMLDivElement | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
-  const [shimmerActive, setShimmerActive] = useState(false);
+  const [isVisible, setIsVisible] = useState(immediateOnMount);
+  const [shimmerActive, setShimmerActive] = useState(immediateOnMount);
 
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
 
     let timer: ReturnType<typeof setTimeout> | null = null;
+
+    if (immediateOnMount) {
+      setIsVisible(true);
+      setShimmerActive(true);
+      timer = setTimeout(() => {
+        setShimmerActive(false);
+      }, 1250 + delayMs);
+    }
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -54,7 +64,7 @@ export const ScrollCloudReveal: React.FC<ScrollCloudRevealProps> = ({
       },
       {
         threshold,
-        rootMargin: "-4% 0px -4% 0px",
+        rootMargin: "40px 0px 40px 0px",
       }
     );
 
