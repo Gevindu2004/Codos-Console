@@ -5,11 +5,7 @@ from app.core.config import settings
 
 
 def get_fernet() -> Fernet:
-    key = settings.DB_CREDENTIAL_ENCRYPTION_KEY
-    # Fallback deterministic dev key if user hasn't set one yet in .env
-    if key.startswith("CHANGE_ME"):
-        key = Fernet.generate_key().decode()
-    return Fernet(key.encode() if isinstance(key, str) else key)
+    return Fernet(settings.DB_CREDENTIAL_ENCRYPTION_KEY.encode())
 
 
 def encrypt_secret(plain_text: str) -> str:

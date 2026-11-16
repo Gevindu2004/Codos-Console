@@ -1,0 +1,2 @@
+# Copy to .postgres.env (ignored by Git). Keep this password in sync with DATABASE_URL.
+POSTGRES_PASSWORD=replace-with-a-url-safe-random-password
