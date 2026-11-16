@@ -1,0 +1,1 @@
+Return policy window is 45 days for enterprise accounts.
