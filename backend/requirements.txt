@@ -1,0 +1,38 @@
+# Web Framework & ASGI Server
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# Azure PostgreSQL + pgvector + SQLAlchemy (Async)
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+psycopg2-binary==2.9.10
+pgvector==0.3.6
+alembic==1.14.0
+
+# External DB Connectors (for User Option A & C: PostgreSQL, MySQL, SQL Server)
+pymysql==1.1.1
+pyodbc==5.2.0
+
+# Security (API Key Hashing & DB Credential Encryption)
+cryptography==44.0.0
+
+# Document Parsing (PDF, DOCX, TXT, CSV, YAML, JSONL)
+pypdf==5.1.0
+python-docx==1.1.2
+pyyaml==6.0.2
+
+# Embeddings & RAG Retrieval (Matches the 3 repos' all-MiniLM-L6-v2)
+sentence-transformers==3.3.1
+numpy==1.26.4
+
+# Model Inference (Local PEFT/Transformers OR Remote GPU Worker)
+torch>=2.2.0
+transformers==4.57.6
+accelerate==1.2.1
+peft==0.14.0
+bitsandbytes==0.46.1
+huggingface_hub>=0.24.0
+httpx==0.28.1
