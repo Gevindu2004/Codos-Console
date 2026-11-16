@@ -1,0 +1,16 @@
+services:
+  skybeak-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: skybeak-postgres
+    env_file:
+      - .postgres.env
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: skybeak_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - skybeak_pgdata:/var/lib/postgresql/data
+
+volumes:
+  skybeak_pgdata:
