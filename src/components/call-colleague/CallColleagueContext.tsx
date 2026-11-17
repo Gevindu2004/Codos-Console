@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import {
   AdminUser,
   AppointmentItem,
@@ -119,6 +119,19 @@ export interface NavigationContextValue {
   navigateTo: (view: CallColleagueView) => void;
 }
 
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
+
+function syncTenantToBackend(tenantId: string, updates: Partial<AdminUser>): void {
+  fetch(`${API_BASE_URL}/agents/${encodeURIComponent(tenantId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  }).catch((err) => {
+    console.warn("[CallColleague] Background tenant sync failed:", err);
+  });
+}
+
 const initialTemplate = INDUSTRY_TEMPLATES.salon;
 
 const DEFAULT_ADMIN_USER: AdminUser = {
@@ -198,6 +211,41 @@ export const CallColleagueProvider: React.FC<{
   const [callLogs, setCallLogs] = useState<CallLogItem[]>(MOCK_CALL_LOGS);
   const [appointments, setAppointments] =
     useState<AppointmentItem[]>(MOCK_APPOINTMENTS);
+
+  useEffect(() => {
+    let active = true;
+    const loadPersistedState = async () => {
+      try {
+        const [callsRes, apptsRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/calls`),
+          fetch(`${API_BASE_URL}/appointments`),
+        ]);
+        if (!active) return;
+        if (callsRes.ok) {
+          const callsData = (await callsRes.json()) as {
+            calls?: CallLogItem[];
+          };
+          if (Array.isArray(callsData.calls)) {
+            setCallLogs(callsData.calls);
+          }
+        }
+        if (apptsRes.ok) {
+          const apptsData = (await apptsRes.json()) as {
+            appointments?: AppointmentItem[];
+          };
+          if (Array.isArray(apptsData.appointments)) {
+            setAppointments(apptsData.appointments);
+          }
+        }
+      } catch {
+        // Keep seeded defaults if API routes are unavailable
+      }
+    };
+    loadPersistedState();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const onboardingValue: OnboardingStoreState = {
     currentStep,
@@ -322,186 +370,229 @@ export const CallColleagueProvider: React.FC<{
 
     logout: () => setIsAuthenticated(false),
 
-    toggleAgentActive: () =>
+    toggleAgentActive: () => {
+      if (!user) return;
+      const nextActive = !user.agentActive;
       setUser((prev) =>
-        prev ? { ...prev, agentActive: !prev.agentActive } : null
-      ),
+        prev ? { ...prev, agentActive: nextActive } : null
+      );
+      syncTenantToBackend(user.id, { agentActive: nextActive });
+    },
 
     updateUser: (updates) =>
       setUser((prev) => (prev ? { ...prev, ...updates } : null)),
 
-    setAdminVoicePersona: (persona) =>
-      setUser((prev) => (prev ? { ...prev, voicePersona: persona } : null)),
+    setAdminVoicePersona: (persona) => {
+      setUser((prev) => (prev ? { ...prev, voicePersona: persona } : null));
+      if (user) {
+        syncTenantToBackend(user.id, { voicePersona: persona });
+      }
+    },
 
-    addAdminService: (service) =>
+    addAdminService: (service) => {
+      if (!user) return;
+      const nextServices = [...user.services, service];
+      setUser((prev) => (prev ? { ...prev, services: nextServices } : null));
+      syncTenantToBackend(user.id, { services: nextServices });
+    },
+
+    updateAdminService: (id, updates) => {
+      if (!user) return;
+      const nextServices = user.services.map((s) =>
+        s.id === id ? { ...s, ...updates } : s
+      );
+      setUser((prev) => (prev ? { ...prev, services: nextServices } : null));
+      syncTenantToBackend(user.id, { services: nextServices });
+    },
+
+    removeAdminService: (id) => {
+      if (!user) return;
+      const nextServices = user.services.filter((s) => s.id !== id);
+      setUser((prev) => (prev ? { ...prev, services: nextServices } : null));
+      syncTenantToBackend(user.id, { services: nextServices });
+    },
+
+    addAdminDepartment: (dept) => {
+      if (!user) return;
+      const nextDepartments = [...user.departments, dept];
       setUser((prev) =>
-        prev ? { ...prev, services: [...prev.services, service] } : null
-      ),
+        prev ? { ...prev, departments: nextDepartments } : null
+      );
+      syncTenantToBackend(user.id, { departments: nextDepartments });
+    },
 
-    updateAdminService: (id, updates) =>
+    updateAdminDepartment: (id, updates) => {
+      if (!user) return;
+      const nextDepartments = user.departments.map((d) =>
+        d.id === id ? { ...d, ...updates } : d
+      );
       setUser((prev) =>
-        prev
-          ? {
-              ...prev,
-              services: prev.services.map((s) =>
-                s.id === id ? { ...s, ...updates } : s
-              ),
-            }
-          : null
-      ),
+        prev ? { ...prev, departments: nextDepartments } : null
+      );
+      syncTenantToBackend(user.id, { departments: nextDepartments });
+    },
 
-    removeAdminService: (id) =>
+    removeAdminDepartment: (id) => {
+      if (!user) return;
+      const nextDepartments = user.departments.filter((d) => d.id !== id);
       setUser((prev) =>
-        prev
-          ? {
-              ...prev,
-              services: prev.services.filter((s) => s.id !== id),
-            }
-          : null
-      ),
+        prev ? { ...prev, departments: nextDepartments } : null
+      );
+      syncTenantToBackend(user.id, { departments: nextDepartments });
+    },
 
-    addAdminDepartment: (dept) =>
+    addAdminFaq: (faq) => {
+      if (!user) return;
+      const nextFaqs = [...user.knowledgeFaqs, faq];
       setUser((prev) =>
-        prev ? { ...prev, departments: [...prev.departments, dept] } : null
-      ),
+        prev ? { ...prev, knowledgeFaqs: nextFaqs } : null
+      );
+      syncTenantToBackend(user.id, { knowledgeFaqs: nextFaqs });
+    },
 
-    updateAdminDepartment: (id, updates) =>
+    updateAdminFaq: (id, updates) => {
+      if (!user) return;
+      const nextFaqs = user.knowledgeFaqs.map((f) =>
+        f.id === id ? { ...f, ...updates } : f
+      );
       setUser((prev) =>
-        prev
-          ? {
-              ...prev,
-              departments: prev.departments.map((d) =>
-                d.id === id ? { ...d, ...updates } : d
-              ),
-            }
-          : null
-      ),
+        prev ? { ...prev, knowledgeFaqs: nextFaqs } : null
+      );
+      syncTenantToBackend(user.id, { knowledgeFaqs: nextFaqs });
+    },
 
-    removeAdminDepartment: (id) =>
+    removeAdminFaq: (id) => {
+      if (!user) return;
+      const nextFaqs = user.knowledgeFaqs.filter((f) => f.id !== id);
       setUser((prev) =>
-        prev
-          ? {
-              ...prev,
-              departments: prev.departments.filter((d) => d.id !== id),
-            }
-          : null
-      ),
+        prev ? { ...prev, knowledgeFaqs: nextFaqs } : null
+      );
+      syncTenantToBackend(user.id, { knowledgeFaqs: nextFaqs });
+    },
 
-    addAdminFaq: (faq) =>
-      setUser((prev) =>
-        prev ? { ...prev, knowledgeFaqs: [...prev.knowledgeFaqs, faq] } : null
-      ),
-
-    updateAdminFaq: (id, updates) =>
-      setUser((prev) =>
-        prev
-          ? {
-              ...prev,
-              knowledgeFaqs: prev.knowledgeFaqs.map((f) =>
-                f.id === id ? { ...f, ...updates } : f
-              ),
-            }
-          : null
-      ),
-
-    removeAdminFaq: (id) =>
-      setUser((prev) =>
-        prev
-          ? {
-              ...prev,
-              knowledgeFaqs: prev.knowledgeFaqs.filter((f) => f.id !== id),
-            }
-          : null
-      ),
-
-    updateAppointmentStatus: (id, status) =>
+    updateAppointmentStatus: (id, status) => {
       setAppointments((prev) =>
         prev.map((apt) => (apt.id === id ? { ...apt, status } : apt))
-      ),
+      );
+      fetch(`${API_BASE_URL}/appointments/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      }).catch(() => {});
+    },
 
-    rescheduleAppointment: (id, newDateTime) =>
+    rescheduleAppointment: (id, newDateTime) => {
       setAppointments((prev) =>
         prev.map((apt) =>
           apt.id === id
             ? { ...apt, dateTime: newDateTime, status: "rescheduled" }
             : apt
         )
-      ),
+      );
+      fetch(`${API_BASE_URL}/appointments/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dateTime: newDateTime }),
+      }).catch(() => {});
+    },
 
     simulateIncomingCall: () => {
       const currentUser = user || DEFAULT_ADMIN_USER;
-      const firstService = currentUser.services[0] || {
-        name: "Consultation",
-        price: 85,
-        durationMinutes: 45,
-        staffMember: "Lead Specialist",
-      };
-      const randomNames = [
-        "Olivia Rodrigo",
-        "Liam Neeson",
-        "Noah Patel",
-        "Emma Stone",
-        "Lucas Gray",
-      ];
-      const caller =
-        randomNames[Math.floor(Math.random() * randomNames.length)];
-      const phone = `+1 (555) ${Math.floor(200 + Math.random() * 700)}-${Math.floor(
-        1000 + Math.random() * 9000
-      )}`;
+      void (async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/calls`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tenantId: currentUser.id }),
+          });
+          if (res.ok) {
+            const data = (await res.json()) as {
+              call: CallLogItem;
+              appointment: AppointmentItem;
+            };
+            setCallLogs((prev) => [data.call, ...prev]);
+            setAppointments((prev) => [data.appointment, ...prev]);
+            return;
+          }
+        } catch {
+          // Fall back to local simulation if API request fails
+        }
 
-      const newCall: CallLogItem = {
-        id: `call_${Date.now()}`,
-        callerName: caller,
-        callerPhone: phone,
-        timestamp: "Just now",
-        duration: "1m 24s",
-        status: "booked",
-        sentiment: "positive",
-        serviceRequested: `${firstService.name} ($${firstService.price})`,
-        summary: `Live simulated call: ${caller} inquired about ${firstService.name}. AI checked Google Calendar availability, confirmed Tomorrow at 2:00 PM with ${
-          firstService.staffMember || "Senior Specialist"
-        }, and sent SMS confirmation.`,
-        transcript: [
-          {
-            role: "agent",
-            text: `Hi! Thank you for calling ${currentUser.businessName}. This is ${currentUser.voicePersona.name}. How can I help you today?`,
-          },
-          {
-            role: "user",
-            text: `Hi! I'd like to book ${firstService.name} for tomorrow afternoon if possible.`,
-          },
-          {
-            role: "agent",
-            text: `Our ${firstService.name} is $${firstService.price} and takes ${firstService.durationMinutes} minutes. I have 2:00 PM open tomorrow with ${
-              firstService.staffMember || "our specialist"
-            }. Shall I lock that in for you?`,
-          },
-          {
-            role: "user",
-            text: `Yes please! My name is ${caller}.`,
-          },
-          {
-            role: "agent",
-            text: `All set, ${caller}! You are confirmed for tomorrow at 2:00 PM. I've just sent a calendar invite and SMS reminder to ${phone}.`,
-          },
-        ],
-      };
+        const firstService = currentUser.services[0] || {
+          name: "Consultation",
+          price: 85,
+          durationMinutes: 45,
+          staffMember: "Lead Specialist",
+        };
+        const randomNames = [
+          "Olivia Rodrigo",
+          "Liam Neeson",
+          "Noah Patel",
+          "Emma Stone",
+          "Lucas Gray",
+        ];
+        const caller =
+          randomNames[Math.floor(Math.random() * randomNames.length)];
+        const phone = `+1 (555) ${Math.floor(
+          200 + Math.random() * 700
+        )}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-      const newAppointment: AppointmentItem = {
-        id: `apt_${Date.now()}`,
-        clientName: caller,
-        clientPhone: phone,
-        serviceName: firstService.name,
-        staffMember: firstService.staffMember || "Senior Specialist",
-        dateTime: "Tomorrow, 2:00 PM",
-        durationMinutes: firstService.durationMinutes,
-        price: firstService.price,
-        status: "confirmed",
-        bookedVia: "AI Voice Receptionist",
-      };
+        const newCall: CallLogItem = {
+          id: `call_${Date.now()}`,
+          callerName: caller,
+          callerPhone: phone,
+          timestamp: "Just now",
+          duration: "1m 24s",
+          status: "booked",
+          sentiment: "positive",
+          serviceRequested: `${firstService.name} ($${firstService.price})`,
+          summary: `Live simulated call: ${caller} inquired about ${
+            firstService.name
+          }. AI checked Google Calendar availability, confirmed Tomorrow at 2:00 PM with ${
+            firstService.staffMember || "Senior Specialist"
+          }, and sent SMS confirmation.`,
+          transcript: [
+            {
+              role: "agent",
+              text: `Hi! Thank you for calling ${currentUser.businessName}. This is ${currentUser.voicePersona.name}. How can I help you today?`,
+            },
+            {
+              role: "user",
+              text: `Hi! I'd like to book ${firstService.name} for tomorrow afternoon if possible.`,
+            },
+            {
+              role: "agent",
+              text: `Our ${firstService.name} is $${firstService.price} and takes ${firstService.durationMinutes} minutes. I have 2:00 PM open tomorrow with ${
+                firstService.staffMember || "our specialist"
+              }. Shall I lock that in for you?`,
+            },
+            {
+              role: "user",
+              text: `Yes please! My name is ${caller}.`,
+            },
+            {
+              role: "agent",
+              text: `All set, ${caller}! You are confirmed for tomorrow at 2:00 PM. I've just sent a calendar invite and SMS reminder to ${phone}.`,
+            },
+          ],
+        };
 
-      setCallLogs((prev) => [newCall, ...prev]);
-      setAppointments((prev) => [newAppointment, ...prev]);
+        const newAppointment: AppointmentItem = {
+          id: `apt_${Date.now()}`,
+          clientName: caller,
+          clientPhone: phone,
+          serviceName: firstService.name,
+          staffMember: firstService.staffMember || "Senior Specialist",
+          dateTime: "Tomorrow, 2:00 PM",
+          durationMinutes: firstService.durationMinutes,
+          price: firstService.price,
+          status: "confirmed",
+          bookedVia: "AI Voice Receptionist",
+        };
+
+        setCallLogs((prev) => [newCall, ...prev]);
+        setAppointments((prev) => [newAppointment, ...prev]);
+      })();
     },
 
     switchDemoTenant: (preset) => {

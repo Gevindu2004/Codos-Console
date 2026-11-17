@@ -12,9 +12,18 @@ class Base(DeclarativeBase):
 
 
 async def init_db():
-    """Enable pgvector extension and create all SkyBeak tables."""
+    """Enable pgvector extension (when available) and create all platform tables."""
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+    except Exception:
+        # Local Windows PostgreSQL without pgvector still supports SkyBeak fallback & all cc_* tables
+        pass
+
+    import app.models.skybeak  # noqa: F401
+    import app.models.call_colleague  # noqa: F401
+
     async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
 
 

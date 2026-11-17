@@ -413,54 +413,48 @@ export const api = {
     payload: AgentProvisionPayload,
     onStepUpdate?: (step: ProvisioningStepResult["step"]) => void
   ): Promise<ProvisionResponse> => {
-    try {
-      if (process.env.NEXT_PUBLIC_API_BASE_URL) {
-        const response = await fetch(`${API_BASE_URL}/agents/provision`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (response.ok) return await response.json();
-      }
-      throw new Error("Backend offline — running cloud simulation");
-    } catch {
-      onStepUpdate?.("supabase_tenant");
-      await new Promise((res) => setTimeout(res, 750));
+    onStepUpdate?.("supabase_tenant");
+    onStepUpdate?.("vapi_assistant");
 
-      onStepUpdate?.("vapi_assistant");
-      await new Promise((res) => setTimeout(res, 850));
+    const response = await fetch(`${API_BASE_URL}/agents/provision`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
-      onStepUpdate?.("phone_binding");
-      await new Promise((res) => setTimeout(res, 750));
-
-      onStepUpdate?.("smoke_test");
-      await new Promise((res) => setTimeout(res, 650));
-
-      const randomDigits = Math.floor(1000 + Math.random() * 9000);
-      const assignedNumber =
-        payload.telephonySetupType === "new_dedicated_number"
-          ? `+1 (888) 412-${randomDigits}`
-          : `+1 (800) 945-${randomDigits}`;
-
-      return {
-        agentId: `ag_${Math.random().toString(36).substring(2, 10)}`,
-        virtualPhoneNumber: assignedNumber,
-        sipEndpointUri:
-          payload.telephonySetupType === "sip_pbx_trunk"
-            ? payload.sipConfig.sipUri ||
-              `sip:agent-${randomDigits}@sip.vapi.ai;transport=tls`
-            : undefined,
-        status: "active",
+    if (!response.ok) {
+      const err = (await response.json().catch(() => ({}))) as {
+        error?: string;
       };
+      throw new Error(err.error || "Failed to provision Vapi agent");
     }
+
+    onStepUpdate?.("phone_binding");
+    onStepUpdate?.("smoke_test");
+    return (await response.json()) as ProvisionResponse;
   },
 
   triggerOtpVerification: async (
     phoneNumber: string
-  ): Promise<{ sent: boolean; demoCode: string }> => {
-    await new Promise((res) => setTimeout(res, 800));
-    console.info(`[Telephony OTP] Verification triggered for ${phoneNumber}`);
-    return { sent: true, demoCode: "4829" };
+  ): Promise<{ sent: boolean; demoCode?: string }> => {
+    const response = await fetch(`${API_BASE_URL}/telephony/otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "send", phoneNumber }),
+    });
+    return (await response.json()) as { sent: boolean; demoCode?: string };
+  },
+
+  verifyOtpCode: async (
+    phoneNumber: string,
+    code: string
+  ): Promise<{ verified: boolean }> => {
+    const response = await fetch(`${API_BASE_URL}/telephony/otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "verify", phoneNumber, code }),
+    });
+    return (await response.json()) as { verified: boolean };
   },
 };
 

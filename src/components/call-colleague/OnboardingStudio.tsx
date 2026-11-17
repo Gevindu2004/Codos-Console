@@ -1318,6 +1318,7 @@ export const Step6CalendarAndPhone: React.FC = () => {
     useGoogleAuth();
 
   const [isProvisioning, setIsProvisioning] = useState(false);
+  const [provisionError, setProvisionError] = useState<string | null>(null);
   const [showCheckout, setShowCheckout] = useState(false);
   const [otpInput, setOtpInput] = useState("");
   const [isSendingOtp, setIsSendingOtp] = useState(false);
@@ -1338,12 +1339,17 @@ export const Step6CalendarAndPhone: React.FC = () => {
     setOtpSent(true);
   };
 
-  const handleVerifyOtp = () => {
-    if (otpInput.trim() === "4829" || otpInput.trim().length >= 4) {
-      state.setNumberVerified(true);
-      setOtpError(null);
-    } else {
-      setOtpError("Invalid code. Use demo code 4829.");
+  const handleVerifyOtp = async () => {
+    try {
+      const result = await api.verifyOtpCode(state.forwardingNumber, otpInput);
+      if (result.verified) {
+        state.setNumberVerified(true);
+        setOtpError(null);
+      } else {
+        setOtpError("Invalid code. Use demo code 4829.");
+      }
+    } catch {
+      setOtpError("Verification request failed. Please try again.");
     }
   };
 
@@ -1356,42 +1362,53 @@ export const Step6CalendarAndPhone: React.FC = () => {
   const handleProvisionConfirm = async () => {
     setShowCheckout(false);
     setIsProvisioning(true);
+    setProvisionError(null);
 
-    const response = await api.provisionAgent({
-      businessName: state.businessName,
-      industry: state.industry,
-      timezone: state.timezone,
-      operatingHours: state.operatingHours,
-      services: state.services,
-      departments: state.departments,
-      knowledgeFaqs: state.knowledgeFaqs,
-      voicePersona: state.voicePersona,
-      googleCalendarConnected: state.googleCalendarConnected,
-      calendarEmail: state.calendarEmail,
-      telephonySetupType: state.telephonySetupType,
-      forwardingNumber: state.forwardingNumber,
-      selectedCarrierId: state.selectedCarrierId,
-      isNumberVerified: state.isNumberVerified,
-      sipConfig: state.sipConfig,
-      planTier: state.planTier,
-    });
+    try {
+      const response = await api.provisionAgent({
+        businessName: state.businessName,
+        industry: state.industry,
+        timezone: state.timezone,
+        operatingHours: state.operatingHours,
+        services: state.services,
+        departments: state.departments,
+        knowledgeFaqs: state.knowledgeFaqs,
+        voicePersona: state.voicePersona,
+        googleCalendarConnected: state.googleCalendarConnected,
+        calendarEmail: state.calendarEmail,
+        telephonySetupType: state.telephonySetupType,
+        forwardingNumber: state.forwardingNumber,
+        selectedCarrierId: state.selectedCarrierId,
+        isNumberVerified: state.isNumberVerified,
+        sipConfig: state.sipConfig,
+        planTier: state.planTier,
+      });
 
-    state.setProvisionedResult(response.agentId, response.virtualPhoneNumber);
-    login("owner@yourbusiness.com", state.businessName);
-    updateUser({
-      businessName: state.businessName,
-      industry: state.industry,
-      virtualPhoneNumber: response.virtualPhoneNumber,
-      timezone: state.timezone,
-      planTier: state.planTier,
-      voicePersona: state.voicePersona,
-      services: state.services,
-      departments: state.departments,
-      knowledgeFaqs: state.knowledgeFaqs,
-      operatingHours: state.operatingHours,
-    });
-    setIsProvisioning(false);
-    navigateTo("success");
+      state.setProvisionedResult(response.agentId, response.virtualPhoneNumber);
+      login("owner@yourbusiness.com", state.businessName);
+      updateUser({
+        id: response.agentId,
+        businessName: state.businessName,
+        industry: state.industry,
+        virtualPhoneNumber: response.virtualPhoneNumber,
+        timezone: state.timezone,
+        planTier: state.planTier,
+        voicePersona: state.voicePersona,
+        services: state.services,
+        departments: state.departments,
+        knowledgeFaqs: state.knowledgeFaqs,
+        operatingHours: state.operatingHours,
+      });
+      navigateTo("success");
+    } catch (error) {
+      setProvisionError(
+        error instanceof Error
+          ? error.message
+          : "Failed to provision Vapi agent."
+      );
+    } finally {
+      setIsProvisioning(false);
+    }
   };
 
   const isDeployDisabled =
@@ -1800,6 +1817,13 @@ export const Step6CalendarAndPhone: React.FC = () => {
           </div>
         </div>
 
+        {provisionError && (
+          <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{provisionError}</span>
+          </div>
+        )}
+
         <div className="mt-8 flex justify-between items-center">
           <Button variant="outline" onClick={state.prevStep}>
             ← Back
@@ -1953,6 +1977,7 @@ export const SuccessPage: React.FC = () => {
   const handleOpenDashboard = () => {
     login("owner@yourbusiness.com", businessName);
     updateUser({
+      id: provisionedAgentId || "usr_demo_01",
       businessName,
       industry,
       virtualPhoneNumber: displayPhone,
