@@ -158,6 +158,27 @@ async def _find_tenant(
 # ---------------------------------------------------------------------------
 # 1. Agent Provisioning & Live Vapi Brain Sync
 # ---------------------------------------------------------------------------
+@router.post("/agents/sandbox-config")
+async def compile_sandbox_config(request: Request):
+    """Compiles transient Step 1-5 wizard state into a capped Vapi WebRTC sandbox DTO."""
+    payload = await request.json()
+    webhook_url = f"{settings.APP_PUBLIC_URL.rstrip('/')}{settings.API_V1_STR}/webhooks/call-colleague"
+    dto = build_vapi_assistant_dto(payload, webhook_url)
+    dto["maxDurationSeconds"] = 180
+    dto["silenceTimeoutSeconds"] = 30
+    return dto
+
+
+@router.get("/agents")
+async def list_agents(db: AsyncSession = Depends(get_db)):
+    res = await db.execute(
+        select(CcTenant)
+        .options(*_tenant_load_options())
+        .order_by(CcTenant.created_at.desc())
+    )
+    return {"agents": [_serialize_tenant(t) for t in res.scalars().all()]}
+
+
 @router.post("/agents/provision", status_code=status.HTTP_201_CREATED)
 async def provision_agent(request: Request, db: AsyncSession = Depends(get_db)):
     payload = await request.json()

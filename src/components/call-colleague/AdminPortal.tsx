@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   PhoneIncoming,
   Copy,
@@ -172,18 +172,45 @@ export const CallDetailModal: React.FC<CallDetailModalProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     setIsPlaying(false);
     setProgress(0);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
   }, [call]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackSpeed;
+    }
+  }, [playbackSpeed]);
 
   useEffect(() => {
     if (!isPlaying) return;
     const interval = window.setInterval(() => {
+      if (audioRef.current && audioRef.current.duration > 0) {
+        const pct = Math.min(
+          100,
+          Math.round(
+            (audioRef.current.currentTime / audioRef.current.duration) * 100
+          )
+        );
+        setProgress(pct);
+        return;
+      }
       setProgress((prev) => {
         if (prev >= 100) {
           setIsPlaying(false);
@@ -200,11 +227,31 @@ export const CallDetailModal: React.FC<CallDetailModalProps> = ({
   const toggleAudioPlayback = () => {
     if (isPlaying) {
       setIsPlaying(false);
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       return;
     }
 
     setIsPlaying(true);
+    if (call.recordingUrl) {
+      if (!audioRef.current || audioRef.current.src !== call.recordingUrl) {
+        const audio = new Audio(call.recordingUrl);
+        audio.onended = () => {
+          setIsPlaying(false);
+          setProgress(100);
+        };
+        audio.onerror = () => {
+          setIsPlaying(false);
+        };
+        audioRef.current = audio;
+      }
+      audioRef.current.playbackRate = playbackSpeed;
+      audioRef.current.play().catch(() => setIsPlaying(false));
+      return;
+    }
+
     if ("speechSynthesis" in window && call.transcript.length > 0) {
       window.speechSynthesis.cancel();
       const combined = call.transcript.map((t) => t.text).join(" ... ");
@@ -567,7 +614,16 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
   const displayed = limit ? filtered.slice(0, limit) : filtered;
 
-  const sendSmsReminder = (apt: AppointmentItem) => {
+  const sendSmsReminder = async (apt: AppointmentItem) => {
+    const apiBase =
+      process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
+    try {
+      await fetch(`${apiBase}/appointments/${encodeURIComponent(apt.id)}`, {
+        method: "POST",
+      });
+    } catch {
+      // Non-blocking toast fallback
+    }
     setSmsToast(
       `SMS reminder sent to ${apt.clientName} (${apt.clientPhone}) for ${apt.dateTime}`
     );

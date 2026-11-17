@@ -97,6 +97,7 @@ export interface CallLogItem {
   sentiment: "positive" | "neutral" | "urgent";
   summary: string;
   serviceRequested?: string;
+  recordingUrl?: string;
   transcript: { role: "agent" | "user"; text: string }[];
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Vapi from "@vapi-ai/web";
 import { useOnboardingStore } from "./CallColleagueContext";
 import { VOICE_PERSONAS } from "./industryTemplates";
 import { AgentProvisionPayload, ProvisionResponse } from "./types";
@@ -552,8 +553,16 @@ export const useGoogleAuth = () => {
 };
 
 export const useVapiWeb = (voiceName: string = "Sophia") => {
-  const { businessName, services, departments, knowledgeFaqs } =
-    useOnboardingStore();
+  const {
+    businessName,
+    industry,
+    timezone,
+    operatingHours,
+    services,
+    departments,
+    knowledgeFaqs,
+    voicePersona,
+  } = useOnboardingStore();
 
   const [isCallActive, setIsCallActive] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -563,6 +572,7 @@ export const useVapiWeb = (voiceName: string = "Sophia") => {
     { role: "agent" | "user"; text: string }[]
   >([]);
 
+  const vapiRef = useRef<Vapi | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
@@ -582,9 +592,148 @@ export const useVapiWeb = (voiceName: string = "Sophia") => {
 
   const startCall = useCallback(async () => {
     setIsConnecting(true);
+    setIsMuted(false);
     setTranscript([]);
     clearTimers();
+    stopPersonaSpeech();
 
+    const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY?.trim();
+    const hasRealVapiKey = Boolean(publicKey && publicKey !== "API KEY 1");
+
+    if (hasRealVapiKey && publicKey) {
+      try {
+        if (vapiRef.current) {
+          await vapiRef.current.stop().catch(() => {});
+          vapiRef.current = null;
+        }
+
+        let assistantDto: Record<string, unknown> | null = null;
+        try {
+          const res = await fetch(`${API_BASE_URL}/agents/sandbox-config`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              businessName,
+              industry,
+              timezone,
+              operatingHours,
+              services,
+              departments,
+              knowledgeFaqs,
+              voicePersona,
+            }),
+          });
+          if (res.ok) {
+            assistantDto = (await res.json()) as Record<string, unknown>;
+          }
+        } catch {
+          // Fall back to client-built inline DTO if backend is unreachable
+        }
+
+        if (!assistantDto) {
+          const voiceMap: Record<string, string> = {
+            "v-sophia": "nova",
+            "v-maya": "shimmer",
+            "v-marcus": "onyx",
+            "v-liam": "echo",
+            "v-arjun": "fable",
+          };
+          assistantDto = {
+            name: `${businessName || "CallColleague"} (${voiceName})`.slice(0, 40),
+            firstMessage: `Hi! Thank you for calling ${
+              businessName || "our office"
+            }. This is ${voiceName}, your AI receptionist. How can I help you today?`,
+            transcriber: {
+              provider: "deepgram",
+              model: "nova-2",
+              language: "en",
+            },
+            model: {
+              provider: "openai",
+              model: "gpt-4o-mini",
+              temperature: 0.3,
+              messages: [
+                {
+                  role: "system",
+                  content: `You are ${voiceName}, the AI receptionist for ${businessName} (${timezone}). Services: ${JSON.stringify(
+                    services
+                  )}. FAQs: ${JSON.stringify(
+                    knowledgeFaqs
+                  )}. Operating hours: ${JSON.stringify(operatingHours)}.`,
+                },
+              ],
+            },
+            voice: {
+              provider: "openai",
+              voiceId: voiceMap[voicePersona.id] || "nova",
+            },
+            maxDurationSeconds: 180,
+            silenceTimeoutSeconds: 30,
+          };
+        }
+
+        const vapi = new Vapi(publicKey);
+        vapiRef.current = vapi;
+
+        vapi.on("call-start", () => {
+          setIsConnecting(false);
+          setIsCallActive(true);
+        });
+
+        vapi.on("call-end", () => {
+          setIsCallActive(false);
+          setIsConnecting(false);
+          setVolumeLevel(0);
+          vapiRef.current = null;
+        });
+
+        vapi.on("volume-level", (vol: number) => {
+          setVolumeLevel(Math.min(1, vol + 0.12));
+        });
+
+        vapi.on("message", (msg: unknown) => {
+          const payload = msg as {
+            type?: string;
+            transcriptType?: string;
+            role?: string;
+            transcript?: string;
+          };
+          if (
+            payload?.type === "transcript" &&
+            payload?.transcriptType === "final" &&
+            payload?.transcript
+          ) {
+            setTranscript((prev) => [
+              ...prev,
+              {
+                role: payload.role === "user" ? "user" : "agent",
+                text: payload.transcript!,
+              },
+            ]);
+          }
+        });
+
+        vapi.on("error", (err: unknown) => {
+          console.warn("[Vapi WebRTC]", err);
+          setIsConnecting(false);
+          setIsCallActive(false);
+          setVolumeLevel(0);
+        });
+
+        await vapi.start(
+          assistantDto as unknown as Parameters<Vapi["start"]>[0]
+        );
+        return;
+      } catch (err) {
+        console.warn("[Vapi WebRTC start failed]", err);
+        vapiRef.current = null;
+        setIsConnecting(false);
+        setIsCallActive(false);
+        return;
+      }
+    }
+
+    // Fallback browser simulation when NEXT_PUBLIC_VAPI_PUBLIC_KEY is not configured
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
@@ -661,19 +810,36 @@ export const useVapiWeb = (voiceName: string = "Sophia") => {
     }
 
     timersRef.current.push(t1, t2, t3);
-  }, [businessName, departments, knowledgeFaqs, services, speakText, voiceName]);
+  }, [
+    businessName,
+    departments,
+    industry,
+    knowledgeFaqs,
+    operatingHours,
+    services,
+    speakText,
+    timezone,
+    voiceName,
+    voicePersona,
+  ]);
 
   const stopCall = useCallback(() => {
     clearTimers();
+    if (vapiRef.current) {
+      vapiRef.current.stop().catch(() => {});
+      vapiRef.current = null;
+    }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
     }
     if (audioContextRef.current) {
       audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
     }
     setIsCallActive(false);
     setIsConnecting(false);
@@ -683,6 +849,9 @@ export const useVapiWeb = (voiceName: string = "Sophia") => {
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => {
       const next = !prev;
+      if (vapiRef.current) {
+        vapiRef.current.setMuted(next);
+      }
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getAudioTracks().forEach((t) => {
           t.enabled = !next;
@@ -693,7 +862,7 @@ export const useVapiWeb = (voiceName: string = "Sophia") => {
   }, []);
 
   useEffect(() => {
-    if (!isCallActive || mediaStreamRef.current) return;
+    if (!isCallActive || mediaStreamRef.current || vapiRef.current) return;
     const interval = window.setInterval(() => {
       setVolumeLevel(Math.random() * 0.65 + 0.15);
     }, 180);
@@ -703,6 +872,10 @@ export const useVapiWeb = (voiceName: string = "Sophia") => {
   useEffect(() => {
     return () => {
       clearTimers();
+      if (vapiRef.current) {
+        vapiRef.current.stop().catch(() => {});
+        vapiRef.current = null;
+      }
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
       }

@@ -216,11 +216,20 @@ export const CallColleagueProvider: React.FC<{
     let active = true;
     const loadPersistedState = async () => {
       try {
-        const [callsRes, apptsRes] = await Promise.all([
+        const [callsRes, apptsRes, agentsRes] = await Promise.all([
           fetch(`${API_BASE_URL}/calls`),
           fetch(`${API_BASE_URL}/appointments`),
+          fetch(`${API_BASE_URL}/agents`),
         ]);
         if (!active) return;
+        if (agentsRes.ok) {
+          const agentsData = (await agentsRes.json()) as {
+            agents?: AdminUser[];
+          };
+          if (Array.isArray(agentsData.agents) && agentsData.agents.length > 0) {
+            setUser(agentsData.agents[0]);
+          }
+        }
         if (callsRes.ok) {
           const callsData = (await callsRes.json()) as {
             calls?: CallLogItem[];
