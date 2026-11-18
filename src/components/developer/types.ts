@@ -54,7 +54,7 @@ export interface ApiSubmissionFormC {
   openApiSpec: string; // raw JSON/YAML string
 }
 export interface ApiSubmissionFormD {
-  authMethod: "api_key" | "bearer" | "basic" | "oauth2" | "none";
+  authMethod: "api_key" | "bearer" | "basic" | "oauth2" | "none" | "";
   credentialsMasked?: string; // never store raw secret on client
 }
 export interface ApiSubmissionFormE {
@@ -100,7 +100,7 @@ export interface ModelSubmissionFormA {
   fineTuned?: boolean;
 }
 export interface ModelSubmissionFormB {
-  hostingMethod: HostingMethod;
+  hostingMethod: HostingMethod | "";
   // Developer‑hosted fields
   inferenceEndpoint?: string; // HTTPS URL when developer_hosted
   hostingProvider?: string;
@@ -119,13 +119,13 @@ export interface ModelSubmissionFormB {
   entrypoint?: string;
 }
 export interface ModelSubmissionFormC {
-  inputType: "text" | "image" | "audio" | "video" | "document" | "json";
+  inputType: "text" | "image" | "audio" | "video" | "document" | "json" | "";
   inputFormats?: string[];
   maxInputSizeMb?: number;
-  outputType: "text" | "image" | "audio" | "video" | "document" | "json";
+  outputType: "text" | "image" | "audio" | "video" | "document" | "json" | "";
   outputFormats?: string[];
-  processingMode: "synchronous" | "asynchronous";
-  deliveryMethod: "direct" | "download_url";
+  processingMode: "synchronous" | "asynchronous" | "";
+  deliveryMethod: "direct" | "download_url" | "";
   schemaJson?: string; // UI playground schema
 }
 export interface ModelSubmissionFormD {
@@ -136,7 +136,7 @@ export interface ModelSubmissionFormD {
   knownLimitations?: string;
 }
 export interface ModelSubmissionFormE {
-  billingUnit: "free" | "per_inference" | "per_image" | "per_video_min" | "per_audio_min" | "per_token" | "subscription" | "credit_package";
+  billingUnit: "free" | "per_inference" | "per_image" | "per_video_min" | "per_audio_min" | "per_token" | "subscription" | "credit_package" | "";
   rate?: number;
   limits?: string;
 }

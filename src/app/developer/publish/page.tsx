@@ -18,12 +18,6 @@ export default function PublishPage() {
           Back to Dashboard
         </Link>
       </div>
-      <div>
-        <h1 className="text-2xl font-bold text-[#F1F5F9]">Publish a Product</h1>
-        <p className="text-sm text-[#CBD5E1] mt-1">
-          Submit an API or AI Model to the CODOS Marketplace. Your progress is auto-saved as a draft.
-        </p>
-      </div>
       {/* Unified single-page submission form */}
       <PublishWizard />
     </div>
