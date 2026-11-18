@@ -18,6 +18,7 @@ export default function ModelPlayground({ model }: Props) {
   const [language, setLanguage] = useState(model.supportedLanguages[0] || "English");
   const [systemPrompt, setSystemPrompt] = useState(model.providerType === "via_codos" ? "You are a helpful CODOS AI assistant." : "");
   const [prompt, setPrompt] = useState(model.sampleInputs[0] || "");
+  const [schemaValues, setSchemaValues] = useState<Record<string, string>>({});
   const [isRunning, setIsRunning] = useState(false);
   const [showJson, setShowJson] = useState(false);
   const [fileName, setFileName] = useState("");
@@ -25,8 +26,31 @@ export default function ModelPlayground({ model }: Props) {
   const [latency, setLatency] = useState(model.avgLatencyMs);
   const [tokens, setTokens] = useState(0);
   const isText = model.inputType === "Text";
+  const rawProperties = model.inputSchema.properties;
+  const schemaProperties = rawProperties && typeof rawProperties === "object" && !Array.isArray(rawProperties)
+    ? Object.entries(rawProperties as Record<string, unknown>)
+    : [];
+  const requiredInputs = Array.isArray(model.inputSchema.required)
+    ? model.inputSchema.required.filter((value): value is string => typeof value === "string")
+    : [];
+  const builtInInputNames = new Set(["prompt", "temperature", "maxTokens", "topP", "language", "resolution"]);
+  if (model.providerType === "via_codos") builtInInputNames.add("systemPrompt");
+  const fileInputNames = new Set(schemaProperties
+    .filter(([, property]) => property !== null && typeof property === "object" && (property as Record<string, unknown>).format === "binary")
+    .map(([name]) => name));
 
   const runTest = () => {
+    const missing = requiredInputs.filter((name) => {
+      if (name === "prompt") return !prompt.trim();
+      if (name === "systemPrompt" && model.providerType === "via_codos") return !systemPrompt.trim();
+      if (name === "file" || fileInputNames.has(name)) return !fileName.trim();
+      if (["temperature", "maxTokens", "topP"].includes(name)) return false;
+      return !schemaValues[name]?.trim();
+    });
+    if (missing.length) {
+      setOutput(`Required schema inputs missing: ${missing.join(", ")}.`);
+      return;
+    }
     setIsRunning(true);
     setOutput("");
     window.setTimeout(() => {
@@ -42,6 +66,7 @@ export default function ModelPlayground({ model }: Props) {
             file: fileName || "sample-test-file",
             language,
             resolution,
+            input: schemaValues,
             result: model.category === "Document processing"
               ? { documentType: "invoice", fields: { invoiceId: "INV-2026-018", total: "$1,240.00" }, confidence: 0.96 }
               : { preview: "Structured model output is ready.", confidence: 0.94 },
@@ -100,6 +125,33 @@ export default function ModelPlayground({ model }: Props) {
             )}
           </div>
         )}
+        {schemaProperties.some(([name, property]) =>
+          !builtInInputNames.has(name) &&
+          !fileInputNames.has(name) &&
+          !(name === "file" && property !== null && typeof property === "object" && (property as Record<string, unknown>).format === "binary"),
+        ) && (
+          <section className="glass-panel rounded-2xl p-4 space-y-3">
+            <h3 className="text-xs font-bold">Schema-defined inputs</h3>
+            {schemaProperties.map(([name, propertyValue]) => {
+              const property = propertyValue !== null && typeof propertyValue === "object"
+                ? propertyValue as Record<string, unknown>
+                : {};
+              const type = typeof property.type === "string" ? property.type : "string";
+              const format = typeof property.format === "string" ? property.format : "";
+              const description = typeof property.description === "string" ? property.description : "";
+              if (builtInInputNames.has(name) || fileInputNames.has(name) || (name === "file" && format === "binary")) return null;
+              if (type === "boolean") {
+                return <label key={name} className="flex items-center gap-2 text-xs text-[#CBD5E1]"><input type="checkbox" checked={schemaValues[name] === "true"} onChange={(event) => setSchemaValues((values) => ({ ...values, [name]: String(event.target.checked) }))} className="accent-[#14B8A6]" /><span>{name}{requiredInputs.includes(name) ? " *" : ""}</span></label>;
+              }
+              const value = schemaValues[name] ?? "";
+              return <label key={name} className="block text-xs text-[#CBD5E1]">{name}{requiredInputs.includes(name) ? " *" : ""}
+                {type === "object" || type === "array"
+                  ? <textarea value={value} onChange={(event) => setSchemaValues((values) => ({ ...values, [name]: event.target.value }))} rows={3} placeholder={description || `Enter ${type} data`} className="mt-1.5 w-full rounded-lg border border-[#F1F5F9]/12 bg-[#0F172A]/50 p-2 text-xs text-[#F1F5F9] outline-none focus:border-[#14B8A6]" />
+                  : <input type={type === "number" || type === "integer" ? "number" : "text"} value={value} onChange={(event) => setSchemaValues((values) => ({ ...values, [name]: event.target.value }))} placeholder={description || `Enter ${name}`} className="mt-1.5 w-full rounded-lg border border-[#F1F5F9]/12 bg-[#0F172A]/50 px-3 py-2 text-xs text-[#F1F5F9] outline-none focus:border-[#14B8A6]" />}
+              </label>;
+            })}
+          </section>
+        )}
         <button onClick={runTest} disabled={isRunning} className="h-10 px-4 rounded-xl bg-[#14B8A6] text-[#0F172A] text-xs font-bold flex items-center gap-2 disabled:opacity-60">
           {isRunning ? "Running test..." : <><Play className="w-4 h-4" />Run Test</>}
         </button>
@@ -116,7 +168,7 @@ export default function ModelPlayground({ model }: Props) {
           {isRunning ? (
             <div className="h-28 flex items-center gap-2 text-xs text-[#CBD5E1]"><span className="w-2 h-2 rounded-full bg-[#14B8A6] animate-pulse" />Streaming response...</div>
           ) : output ? (
-            showJson && isText ? <pre className="text-xs whitespace-pre-wrap text-[#CBD5E1]">{JSON.stringify({ response: output, latencyMs: latency, tokens }, null, 2)}</pre> : <pre className="text-xs whitespace-pre-wrap text-[#CBD5E1]">{output}</pre>
+            showJson && isText ? <pre className="text-xs whitespace-pre-wrap text-[#CBD5E1]">{JSON.stringify({ response: output, input: schemaValues, latencyMs: latency, tokens }, null, 2)}</pre> : <pre className="text-xs whitespace-pre-wrap text-[#CBD5E1]">{output}</pre>
           ) : (
             <div className="h-28 flex items-center justify-center text-xs text-[#CBD5E1]/60">Run a test to inspect the response.</div>
           )}

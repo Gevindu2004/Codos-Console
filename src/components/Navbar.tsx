@@ -51,10 +51,12 @@ export const Navbar: React.FC<NavbarProps> = ({
     { label: "Call Colleague", href: "#voice-service" },
     { label: "Thumbs Up API", href: "#api-service" },
     { label: "Sky Beak LLM", href: "#llm-service" },
+    { label: "Console", href: "/console" },
     { label: "Model Hub", href: "/models" },
     { label: "API Marketplace", href: "/apis" },
     { label: "Pricing", href: "#pricing" },
     { label: "Developer Portal", href: "/developer" },
+    { label: "Admin Portal", href: "/admin" },
   ];
 
   const handleNavClick = (

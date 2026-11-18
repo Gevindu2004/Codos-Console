@@ -444,6 +444,11 @@ export async function getMarketplaceModels(): Promise<MarketplaceModel[]> {
   } catch {
     // The catalog fallback keeps the Model Hub useful if the backend is offline.
   }
+  const uniqueSkyModels = new Map<string, CatalogModel>();
+  for (const model of [...skyModels, ...fallbackSkyBeakModels]) {
+    const key = slugify(model.name);
+    if (!uniqueSkyModels.has(key)) uniqueSkyModels.set(key, model);
+  }
 
   let developerModels: MarketplaceModel[] = [];
   try {
@@ -454,7 +459,7 @@ export async function getMarketplaceModels(): Promise<MarketplaceModel[]> {
   }
 
   return [
-    ...skyModels.map(normalizeSkyBeak),
+    ...Array.from(uniqueSkyModels.values(), normalizeSkyBeak),
     ...developerModels,
     ...representativeModels,
     ...extraRepresentativeModels,

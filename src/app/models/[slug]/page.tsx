@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, use, useEffect, useState } from "react";
 import Link from "next/link";
-import { BadgeCheck, ChevronRight, Code2, DollarSign, Layers3, Play } from "lucide-react";
+import { BadgeCheck, Check, ChevronRight, Code2, Copy, DollarSign, Layers3, Play } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { SeoFooter } from "@/components/SeoFooter";
 import { getMarketplaceModelBySlug } from "@/lib/modelHubApi";
@@ -14,15 +14,15 @@ import SubscriptionModal from "@/components/model-hub/SubscriptionModal";
 type Tab = "Playground" | "Overview & Specs" | "API & I/O Schema" | "Pricing & Compliance";
 
 export default function ModelDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const [slug, setSlug] = useState("");
+  return <Suspense fallback={<main className="min-h-screen bg-[#0F172A] text-[#F1F5F9]"><Navbar activeView="landing" /><div className="pt-28 px-6 text-sm">Loading model...</div></main>}><ModelDetailContent params={params} /></Suspense>;
+}
+
+function ModelDetailContent({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = use(params);
   const [model, setModel] = useState<MarketplaceModel | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("Playground");
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
-
-  useEffect(() => {
-    params.then(({ slug: routeSlug }) => setSlug(routeSlug));
-  }, [params]);
 
   useEffect(() => {
     if (!slug) return;
@@ -93,6 +93,7 @@ export default function ModelDetailPage({ params }: { params: Promise<{ slug: st
               <section className="glass-panel rounded-2xl p-5 space-y-5">
                 <SchemaBlock title="Input JSON Schema" schema={model.inputSchema} />
                 <SchemaBlock title="Output JSON Schema" schema={model.outputSchema} />
+                <ModelApiExamples model={model} />
               </section>
             )}
             {activeTab === "Pricing & Compliance" && (
@@ -121,6 +122,43 @@ function SchemaBlock({ title, schema }: { title: string; schema: Record<string, 
       <div className="flex items-center justify-between"><h2 className="text-sm font-bold">{title}</h2><Code2 className="w-4 h-4 text-[#14B8A6]" /></div>
       <pre className="mt-3 overflow-x-auto rounded-xl bg-[#090D16] border border-[#F1F5F9]/10 p-4 text-[11px] text-[#CBD5E1]">{JSON.stringify(schema, null, 2)}</pre>
     </div>
+  );
+}
+
+function ModelApiExamples({ model }: { model: MarketplaceModel }) {
+  const [language, setLanguage] = useState("cURL");
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState("");
+  const endpoint = `https://api.viacodos.com/v1/models/${model.slug}/invoke`;
+  const snippets: Record<string, string> = {
+    cURL: `curl -X POST "${endpoint}" \\\n  -H "Authorization: Bearer $CODOS_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"prompt":"Summarize this document"}'`,
+    Python: `import requests\n\nresponse = requests.post(\n    "${endpoint}",\n    headers={"Authorization": "Bearer $CODOS_API_KEY"},\n    json={"prompt": "Summarize this document"},\n)\nprint(response.json())`,
+    TypeScript: `const response = await fetch("${endpoint}", {\n  method: "POST",\n  headers: {\n    Authorization: "Bearer $CODOS_API_KEY",\n    "Content-Type": "application/json",\n  },\n  body: JSON.stringify({ prompt: "Summarize this document" }),\n});\nconsole.log(await response.json());`,
+  };
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(snippets[language]);
+      setCopied(true);
+      setCopyError("");
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch (error) {
+      console.error("Could not copy model API example", error);
+      setCopyError("Clipboard unavailable; select and copy the example.");
+    }
+  };
+
+  return (
+    <section>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-bold">REST / SDK examples</h2>
+        <div className="flex items-center gap-1">
+          {Object.keys(snippets).map((value) => <button key={value} onClick={() => setLanguage(value)} className={`rounded-md px-2.5 py-1.5 text-[10px] ${language === value ? "bg-[#14B8A6]/20 text-[#14B8A6]" : "text-[#CBD5E1]"}`}>{value}</button>)}
+          <button onClick={copy} className="ml-1 inline-flex items-center gap-1 rounded-md border border-[#F1F5F9]/12 px-2 py-1.5 text-[10px]">{copied ? <Check className="h-3 w-3 text-[#14B8A6]" /> : <Copy className="h-3 w-3" />}{copied ? "Copied" : "Copy"}</button>
+        </div>
+      </div>
+      {copyError && <p role="status" className="mb-2 text-[10px] text-amber-200">{copyError}</p>}
+      <pre className="overflow-x-auto rounded-xl border border-[#F1F5F9]/10 bg-[#090D16] p-4 text-[11px] leading-relaxed text-[#CBD5E1]">{snippets[language]}</pre>
+    </section>
   );
 }
 

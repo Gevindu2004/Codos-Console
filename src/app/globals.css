@@ -19,6 +19,16 @@
     --cursor-glare: rgba(20, 184, 166, 0.18);
   }
 
+  select,
+  option {
+    color-scheme: dark;
+  }
+
+  option {
+    background-color: #0B1120;
+    color: #F1F5F9;
+  }
+
   html[data-theme="light"] {
     --cursor-glare: rgba(20, 33, 61, 0.16);
   }

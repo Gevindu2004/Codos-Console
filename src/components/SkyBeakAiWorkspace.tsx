@@ -603,7 +603,7 @@ export const SkyBeakAiWorkspace: React.FC<SkyBeakAiWorkspaceProps> = ({
                 className="px-3.5 py-2 rounded-xl bg-[#0F172A] border border-[#F1F5F9]/20 text-xs font-bold text-[#14B8A6]"
               >
                 {userModels.map((m) => (
-                  <option key={m.id} value={m.id}>
+                  <option className="bg-[#0B1120] text-slate-100" key={m.id} value={m.id}>
                     {m.name} ({m.status})
                   </option>
                 ))}
@@ -653,9 +653,9 @@ export const SkyBeakAiWorkspace: React.FC<SkyBeakAiWorkspaceProps> = ({
                       }
                       className="px-3 py-2 rounded-xl bg-[#0F172A] border border-[#F1F5F9]/15 text-xs text-[#F1F5F9]"
                     >
-                      <option value="postgresql">PostgreSQL / Azure PG</option>
-                      <option value="mysql">MySQL / MariaDB</option>
-                      <option value="mssql">SQL Server (MSSQL)</option>
+                      <option className="bg-[#0B1120] text-slate-100" value="postgresql">PostgreSQL / Azure PG</option>
+                      <option className="bg-[#0B1120] text-slate-100" value="mysql">MySQL / MariaDB</option>
+                      <option className="bg-[#0B1120] text-slate-100" value="mssql">SQL Server (MSSQL)</option>
                     </select>
                     <input
                       type="text"
@@ -945,7 +945,7 @@ export const SkyBeakAiWorkspace: React.FC<SkyBeakAiWorkspaceProps> = ({
               className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F172A] border border-[#F1F5F9]/20 text-xs font-bold text-[#F1F5F9]"
             >
               {userModels.map((m) => (
-                <option key={m.id} value={m.id}>
+                <option className="bg-[#0B1120] text-slate-100" key={m.id} value={m.id}>
                   {m.name} ({m.industry || "General AI"})
                 </option>
               ))}

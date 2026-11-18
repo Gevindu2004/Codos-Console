@@ -12,6 +12,7 @@ interface Props {
 
 export default function SubscriptionModal({ model, open, onClose }: Props) {
   const [plan, setPlan] = useState("Free trial");
+  const [activatedPlan, setActivatedPlan] = useState<string | null>(null);
   const [language, setLanguage] = useState("cURL");
   const [copied, setCopied] = useState(false);
   if (!open || !model) return null;
@@ -41,15 +42,16 @@ export default function SubscriptionModal({ model, open, onClose }: Props) {
         </div>
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2">
           {["Free trial", "Pay-as-you-go", ...(model.plans?.map((item) => item.name) || [])].filter((value, index, all) => all.indexOf(value) === index).map((name) => (
-            <button key={name} onClick={() => setPlan(name)} className={`p-3 rounded-xl border text-left ${plan === name ? "border-[#14B8A6]/60 bg-[#14B8A6]/10" : "border-[#F1F5F9]/12"}`}>
+            <button key={name} onClick={() => { setPlan(name); setActivatedPlan(null); }} className={`p-3 rounded-xl border text-left ${plan === name ? "border-[#14B8A6]/60 bg-[#14B8A6]/10" : "border-[#F1F5F9]/12"}`}>
               <span className="text-xs font-bold">{name}</span>
               <span className="mt-1 block text-[10px] text-[#CBD5E1]">{name === "Free trial" ? model.freeTierAllowance : name === "Pay-as-you-go" ? model.priceDisplay : "Subscription plan"}</span>
             </button>
           ))}
         </div>
-        <button onClick={() => setPlan((value) => value)} className="mt-4 w-full h-10 rounded-xl bg-[#14B8A6] text-[#0F172A] text-xs font-bold flex items-center justify-center gap-2">
-          <Check className="w-4 h-4" />Activate {plan}
+        <button onClick={() => setActivatedPlan(plan)} className="mt-4 w-full h-10 rounded-xl bg-[#14B8A6] text-[#0F172A] text-xs font-bold flex items-center justify-center gap-2">
+          <Check className="w-4 h-4" />{activatedPlan === plan ? "Access Activated" : `Activate ${plan}`}
         </button>
+        {activatedPlan && <p role="status" className="mt-2 text-center text-xs text-[#14B8A6]">{activatedPlan} access is active for this demo session.</p>}
         <div className="mt-5">
           <div className="flex items-center justify-between mb-2">
             <div className="flex gap-1">

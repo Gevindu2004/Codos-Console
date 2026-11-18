@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, use, useEffect, useState } from "react";
 import Link from "next/link";
 import { BadgeCheck, Check, ChevronRight, Copy, ExternalLink, KeyRound } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
@@ -15,16 +15,16 @@ import ApiUsageAnalytics from "@/components/api-marketplace/ApiUsageAnalytics";
 type Tab = "Documentation" | "Pricing & Plans" | "API Keys" | "Usage & Analytics" | "Overview & SLA";
 
 export default function ApiDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const [slug, setSlug] = useState("");
+  return <Suspense fallback={<main className="min-h-screen bg-[#0F172A] text-[#F1F5F9]"><Navbar activeView="landing" /><div className="pt-28 px-6 text-sm">Loading API...</div></main>}><ApiDetailContent params={params} /></Suspense>;
+}
+
+function ApiDetailContent({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = use(params);
   const [api, setApi] = useState<MarketplaceApi | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("Documentation");
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState("");
-
-  useEffect(() => {
-    params.then(({ slug: routeSlug }) => setSlug(routeSlug));
-  }, [params]);
 
   useEffect(() => {
     if (!slug) return;

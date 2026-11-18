@@ -26,6 +26,9 @@ type FieldProps = {
 
 const fieldClass =
   "w-full rounded-lg border border-[#F1F5F9]/10 bg-[#0F172A] px-3 py-2 text-sm text-[#F1F5F9] placeholder-[#CBD5E1]/40 focus:border-[#14B8A6] focus:outline-none";
+const selectClass =
+  "w-full rounded-lg border border-slate-700/80 bg-[#0B1120] px-3 py-2 text-sm text-slate-100 focus:border-teal-400 focus:outline-none";
+const optionClass = "bg-[#0B1120] text-slate-100";
 
 function TextField({
   label,
@@ -116,7 +119,7 @@ function SelectField({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className={fieldClass}
+        className={selectClass}
       >
         {children}
       </select>
@@ -803,7 +806,7 @@ export const PublishWizard: React.FC = () => {
 
           <FormCard id="section-d" title="Form D — Authentication & Credentials" description="Configure the API authentication contract. Secrets are never included in the saved draft." highlighted={editorMode === "fix"}>
             <SelectField label="Authentication method" value={apiPayload.formD.authMethod} onChange={(value) => updateApiD({ authMethod: value as ApiSubmissionPayload["formD"]["authMethod"] })}>
-              <option value="">Select authentication method...</option><option value="none">None</option><option value="api_key">API key</option><option value="bearer">Bearer token</option><option value="basic">Basic authentication</option><option value="oauth2">OAuth 2.0</option>
+              <option className={optionClass} value="">Select authentication method...</option><option className={optionClass} value="none">None</option><option className={optionClass} value="api_key">API key</option><option className={optionClass} value="bearer">Bearer token</option><option className={optionClass} value="basic">Basic authentication</option><option className={optionClass} value="oauth2">OAuth 2.0</option>
             </SelectField>
             {apiPayload.formD.authMethod !== "" && apiPayload.formD.authMethod !== "none" && (
               <label className="block space-y-1.5 text-xs text-[#CBD5E1]">
@@ -897,23 +900,23 @@ export const PublishWizard: React.FC = () => {
 
           <FormCard id="section-c" title="Form C — Input / Output Schema & Playground" description="Define supported formats and preview JSON schema and sample input." highlighted={editorMode === "fix"}>
             <SelectField label="Input type" value={modelPayload.formC.inputType} onChange={(value) => updateModelC({ inputType: value as ModelSubmissionPayload["formC"]["inputType"] })}>
-              <option value="">Select input type...</option>
-              {["text", "image", "audio", "video", "document", "json"].map((item) => <option key={item} value={item}>{item}</option>)}
+              <option className={optionClass} value="">Select input type...</option>
+              {["text", "image", "audio", "video", "document", "json"].map((item) => <option className={optionClass} key={item} value={item}>{item}</option>)}
             </SelectField>
             <TextAreaField label="Input formats (one per line)" value={linesValue(modelPayload.formC.inputFormats)} onChange={(value) => updateModelC({ inputFormats: linesToList(value) })} rows={2} placeholder="e.g., JSON" />
             <SelectField label="Output type" value={modelPayload.formC.outputType} onChange={(value) => updateModelC({ outputType: value as ModelSubmissionPayload["formC"]["outputType"] })}>
-              <option value="">Select output type...</option>
-              {["text", "image", "audio", "video", "document", "json"].map((item) => <option key={item} value={item}>{item}</option>)}
+              <option className={optionClass} value="">Select output type...</option>
+              {["text", "image", "audio", "video", "document", "json"].map((item) => <option className={optionClass} key={item} value={item}>{item}</option>)}
             </SelectField>
             <TextAreaField label="Output formats (one per line)" value={linesValue(modelPayload.formC.outputFormats)} onChange={(value) => updateModelC({ outputFormats: linesToList(value) })} rows={2} placeholder="e.g., JSON" />
             <TextField label="Maximum input size (MB)" value={numberValue(modelPayload.formC.maxInputSizeMb)} onChange={(value) => updateModelC({ maxInputSizeMb: value ? Number(value) : undefined })} type="number" min="0" placeholder="e.g., 5" />
             <SelectField label="Processing mode" value={modelPayload.formC.processingMode} onChange={(value) => updateModelC({ processingMode: value as ModelSubmissionPayload["formC"]["processingMode"] })}>
-              <option value="">Select processing mode...</option>
-              <option value="synchronous">Synchronous</option><option value="asynchronous">Asynchronous</option>
+              <option className={optionClass} value="">Select processing mode...</option>
+              <option className={optionClass} value="synchronous">Synchronous</option><option className={optionClass} value="asynchronous">Asynchronous</option>
             </SelectField>
             <SelectField label="Result delivery" value={modelPayload.formC.deliveryMethod} onChange={(value) => updateModelC({ deliveryMethod: value as ModelSubmissionPayload["formC"]["deliveryMethod"] })}>
-              <option value="">Select result delivery...</option>
-              <option value="direct">Direct response</option><option value="download_url">Download URL</option>
+              <option className={optionClass} value="">Select result delivery...</option>
+              <option className={optionClass} value="direct">Direct response</option><option className={optionClass} value="download_url">Download URL</option>
             </SelectField>
             <div className="sm:col-span-2 space-y-3">
               <TextAreaField label="Input / output schema (JSON)" value={modelPayload.formC.schemaJson ?? ""} onChange={(value) => updateModelC({ schemaJson: value })} rows={7} placeholder={'e.g., {"input":{"type":"string"},"output":{"type":"string"}}'} />
@@ -947,8 +950,8 @@ export const PublishWizard: React.FC = () => {
 
           <FormCard id="section-e" title="Form E — Model Pricing & Billable Unit" description="Choose the unit used to meter model usage and set rate and limits." highlighted={editorMode === "fix"}>
             <SelectField label="Billable unit" value={modelPayload.formE.billingUnit} onChange={(value) => updateModelE({ billingUnit: value as ModelSubmissionPayload["formE"]["billingUnit"] })}>
-              <option value="">Select a billable unit...</option>
-              <option value="free">Free</option><option value="per_inference">Per inference</option><option value="per_image">Per image</option><option value="per_video_min">Per video minute</option><option value="per_audio_min">Per audio minute</option><option value="per_token">Per token</option><option value="subscription">Subscription</option><option value="credit_package">Credit package</option>
+              <option className={optionClass} value="">Select a billable unit...</option>
+              <option className={optionClass} value="free">Free</option><option className={optionClass} value="per_inference">Per inference</option><option className={optionClass} value="per_image">Per image</option><option className={optionClass} value="per_video_min">Per video minute</option><option className={optionClass} value="per_audio_min">Per audio minute</option><option className={optionClass} value="per_token">Per token</option><option className={optionClass} value="subscription">Subscription</option><option className={optionClass} value="credit_package">Credit package</option>
             </SelectField>
             <TextField label="Rate (USD per billable unit)" value={numberValue(modelPayload.formE.rate)} onChange={(value) => updateModelE({ rate: value ? Number(value) : undefined })} type="number" min="0" step="0.000001" placeholder="e.g., 0.001" />
             <div className="sm:col-span-2">

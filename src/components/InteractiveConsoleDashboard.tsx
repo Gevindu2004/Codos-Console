@@ -852,14 +852,14 @@ export const InteractiveConsoleDashboard: React.FC<
               })}
             </nav>
 
-            {/* Developer Portal */}
+            {/* Ecosystem & Governance */}
             <div className="space-y-2 px-1">
               <div
                 className={`px-2 text-[10px] font-bold uppercase tracking-wider ${
                   isLightTheme ? "text-[#0B0B0C]/45" : "text-[#F1F5F9]/40"
                 }`}
               >
-                Developer
+                Ecosystem & Governance
               </div>
               <Link
                 href="/apis"
@@ -904,6 +904,17 @@ export const InteractiveConsoleDashboard: React.FC<
                 >
                   NEW
                 </span>
+              </Link>
+              <Link
+                href="/admin"
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  isLightTheme
+                    ? "text-[#14213D] hover:bg-[#14213D]/10"
+                    : "text-[#F1F5F9]/75 hover:bg-[#F1F5F9]/10 hover:text-[#F1F5F9]"
+                }`}
+              >
+                <ShieldCheck className="w-4 h-4 text-[#14B8A6]" />
+                <span>Admin Portal</span>
               </Link>
             </div>
           </div>
@@ -1687,10 +1698,10 @@ export const InteractiveConsoleDashboard: React.FC<
                   onChange={(e) => setNewKeyScope(e.target.value)}
                   className="w-full px-3.5 py-2 rounded-xl bg-[#0F172A] border border-[#F1F5F9]/15 text-xs text-[#F1F5F9] outline-none"
                 >
-                  <option value="all">Full Access (Voice, API, LLM)</option>
-                  <option value="voice">Voice Only</option>
-                  <option value="api">API Gateway Only</option>
-                  <option value="llm">Sky Beak LLM Only</option>
+                  <option className="bg-[#0B1120] text-slate-100" value="all">Full Access (Voice, API, LLM)</option>
+                  <option className="bg-[#0B1120] text-slate-100" value="voice">Voice Only</option>
+                  <option className="bg-[#0B1120] text-slate-100" value="api">API Gateway Only</option>
+                  <option className="bg-[#0B1120] text-slate-100" value="llm">Sky Beak LLM Only</option>
                 </select>
               </div>
             </div>
