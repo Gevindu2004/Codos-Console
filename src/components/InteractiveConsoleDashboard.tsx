@@ -862,6 +862,17 @@ export const InteractiveConsoleDashboard: React.FC<
                 Developer
               </div>
               <Link
+                href="/apis"
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  isLightTheme
+                    ? "text-[#14213D] hover:bg-[#14213D]/10"
+                    : "text-[#F1F5F9]/75 hover:bg-[#F1F5F9]/10 hover:text-[#F1F5F9]"
+                }`}
+              >
+                <KeyRound className="w-4 h-4 text-[#14B8A6]" />
+                <span>API Marketplace</span>
+              </Link>
+              <Link
                 href="/models"
                 className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   isLightTheme

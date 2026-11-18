@@ -2,6 +2,7 @@
 
 @layer base {
   :root {
+    color-scheme: dark;
     --primary-base: #0F172A;
     --primary-dark: #090D16;
     --primary-card: #1E293B;

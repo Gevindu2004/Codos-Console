@@ -229,13 +229,13 @@ export default function SettingsPage() {
           </Field>
           <Field label="Country *" error={errors.country}>
             <select
-              className={inputCls}
+              className="w-full rounded-lg bg-[#0B1120] text-slate-100 border border-slate-700/80 px-3 py-2 text-sm focus:outline-none focus:border-teal-400 transition-colors"
               value={form.country}
               onChange={set("country")}
             >
-              <option value="">Select country…</option>
+              <option className="bg-[#0B1120] text-slate-100" value="">Select country…</option>
               {COUNTRIES.map((c) => (
-                <option key={c} value={c}>
+                <option className="bg-[#0B1120] text-slate-100" key={c} value={c}>
                   {c}
                 </option>
               ))}
@@ -269,12 +269,12 @@ export default function SettingsPage() {
 
         <Field label="Payout Method">
           <select
-            className={inputCls}
+            className="w-full rounded-lg bg-[#0B1120] text-slate-100 border border-slate-700/80 px-3 py-2 text-sm focus:outline-none focus:border-teal-400 transition-colors"
             value={form.payoutMethod}
             onChange={set("payoutMethod")}
           >
             {PAYOUT_METHODS.map((pm) => (
-              <option key={pm.value} value={pm.value}>
+              <option className="bg-[#0B1120] text-slate-100" key={pm.value} value={pm.value}>
                 {pm.label}
               </option>
             ))}

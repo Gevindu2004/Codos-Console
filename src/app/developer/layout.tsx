@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import Link from "next/link";
-import { LayoutDashboard, Code2, BarChart3, CreditCard, Settings, Package, User, Boxes, ArrowLeft } from "lucide-react";
+import { LayoutDashboard, Code2, BarChart3, CreditCard, Settings, Package, User, Boxes, ArrowLeft, KeyRound } from "lucide-react";
 import { DeveloperProvider } from "../../components/developer/DeveloperContext";
 
 export default function DeveloperLayout({ children }: { children: React.ReactNode }) {
@@ -27,9 +27,12 @@ export default function DeveloperLayout({ children }: { children: React.ReactNod
           <Link href="/" className="flex items-center mb-6">
             <div className="text-2xl font-bold text-[#14B8A6]">Developer Portal</div>
           </Link>
-          <div className="mb-4 grid grid-cols-2 gap-2">
+          <div className="mb-4 grid grid-cols-3 gap-2">
             <Link href="/console" className="flex items-center justify-center gap-1.5 rounded-lg border border-[#F1F5F9]/10 px-2 py-2 text-[11px] hover:bg-[#14B8A6]/10">
               <ArrowLeft className="w-3.5 h-3.5" />Console
+            </Link>
+            <Link href="/apis" className="flex items-center justify-center gap-1.5 rounded-lg border border-[#F1F5F9]/10 px-2 py-2 text-[11px] hover:bg-[#14B8A6]/10">
+              <KeyRound className="w-3.5 h-3.5" />APIs
             </Link>
             <Link href="/models" className="flex items-center justify-center gap-1.5 rounded-lg border border-[#F1F5F9]/10 px-2 py-2 text-[11px] hover:bg-[#14B8A6]/10">
               <Boxes className="w-3.5 h-3.5" />Model Hub

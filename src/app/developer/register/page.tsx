@@ -175,23 +175,23 @@ export default function DeveloperRegistration() {
             onChange={(event) => updateField("country", event.target.value)}
             aria-invalid={Boolean(errors.country)}
             aria-describedby={errors.country ? "country-error" : "country-help"}
-            className={inputClass}
+            className="mt-1 block w-full rounded-md bg-[#0B1120] text-slate-100 border border-slate-700/80 px-3 py-2 text-sm focus:outline-none focus:border-teal-400"
           >
-            <option value="">Select your country...</option>
-            <option value="Sri Lanka">Sri Lanka</option>
-            <option value="United States">United States</option>
-            <option value="United Kingdom">United Kingdom</option>
-            <option value="India">India</option>
-            <option value="Singapore">Singapore</option>
-            <option value="Germany">Germany</option>
-            <option value="Australia">Australia</option>
-            <option value="Canada">Canada</option>
-            <option value="France">France</option>
-            <option value="Ireland">Ireland</option>
-            <option value="Japan">Japan</option>
-            <option value="Netherlands">Netherlands</option>
-            <option value="New Zealand">New Zealand</option>
-            <option value="Other">Other</option>
+            <option className="bg-[#0B1120] text-slate-100" value="">Select your country...</option>
+            <option className="bg-[#0B1120] text-slate-100" value="Sri Lanka">Sri Lanka</option>
+            <option className="bg-[#0B1120] text-slate-100" value="United States">United States</option>
+            <option className="bg-[#0B1120] text-slate-100" value="United Kingdom">United Kingdom</option>
+            <option className="bg-[#0B1120] text-slate-100" value="India">India</option>
+            <option className="bg-[#0B1120] text-slate-100" value="Singapore">Singapore</option>
+            <option className="bg-[#0B1120] text-slate-100" value="Germany">Germany</option>
+            <option className="bg-[#0B1120] text-slate-100" value="Australia">Australia</option>
+            <option className="bg-[#0B1120] text-slate-100" value="Canada">Canada</option>
+            <option className="bg-[#0B1120] text-slate-100" value="France">France</option>
+            <option className="bg-[#0B1120] text-slate-100" value="Ireland">Ireland</option>
+            <option className="bg-[#0B1120] text-slate-100" value="Japan">Japan</option>
+            <option className="bg-[#0B1120] text-slate-100" value="Netherlands">Netherlands</option>
+            <option className="bg-[#0B1120] text-slate-100" value="New Zealand">New Zealand</option>
+            <option className="bg-[#0B1120] text-slate-100" value="Other">Other</option>
           </select>
           <p id="country-help" className={helperClass}>
             Required for payout routing and tax compliance.

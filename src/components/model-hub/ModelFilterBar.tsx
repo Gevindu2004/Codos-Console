@@ -34,6 +34,8 @@ interface Props {
 }
 
 const pill = "px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-colors";
+const selectClass = "h-9 rounded-lg bg-[#0B1120] text-slate-100 border border-slate-700/80 px-3 text-xs focus:border-teal-400 focus:outline-none";
+const optionClass = "bg-[#0B1120] text-slate-100";
 
 export default function ModelFilterBar(props: Props) {
   const providers: Array<["All", "All"] | ["Via Codos", "via_codos"] | ["Third-Party", "third_party"]> = [
@@ -68,20 +70,20 @@ export default function ModelFilterBar(props: Props) {
         ))}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        <select value={props.category} onChange={(event) => props.onCategory(event.target.value as "All" | ModelCategory)} className="h-9 rounded-lg bg-[#0F172A]/40 border border-[#F1F5F9]/12 px-3 text-xs">
-          <option value="All">All Categories</option>
-          {MODEL_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+        <select value={props.category} onChange={(event) => props.onCategory(event.target.value as "All" | ModelCategory)} className={selectClass}>
+          <option className={optionClass} value="All">All Categories</option>
+          {MODEL_CATEGORIES.map((category) => <option className={optionClass} key={category} value={category}>{category}</option>)}
         </select>
-        <select value={props.pricing} onChange={(event) => props.onPricing(event.target.value as PricingFilter)} className="h-9 rounded-lg bg-[#0F172A]/40 border border-[#F1F5F9]/12 px-3 text-xs">
-          <option>All</option>
-          <option>Free Tier</option>
-          <option>Pay-as-you-go</option>
-          <option>Subscription</option>
+        <select value={props.pricing} onChange={(event) => props.onPricing(event.target.value as PricingFilter)} className={selectClass}>
+          <option className={optionClass}>All</option>
+          <option className={optionClass}>Free Tier</option>
+          <option className={optionClass}>Pay-as-you-go</option>
+          <option className={optionClass}>Subscription</option>
         </select>
-        <select value={props.sort} onChange={(event) => props.onSort(event.target.value as SortOption)} className="h-9 rounded-lg bg-[#0F172A]/40 border border-[#F1F5F9]/12 px-3 text-xs">
-          <option>Featured</option>
-          <option>Lowest Latency</option>
-          <option>Newest</option>
+        <select value={props.sort} onChange={(event) => props.onSort(event.target.value as SortOption)} className={selectClass}>
+          <option className={optionClass}>Featured</option>
+          <option className={optionClass}>Lowest Latency</option>
+          <option className={optionClass}>Newest</option>
         </select>
       </div>
     </div>

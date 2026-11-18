@@ -31,26 +31,26 @@ export default function PlaygroundParameterPanel(props: Props) {
         <>
           {props.model.inputType === "Image" && (
             <label className="block text-xs text-[#CBD5E1]">Resolution
-              <select value={props.resolution} onChange={(event) => props.onResolution(event.target.value)} className="mt-2 w-full h-9 rounded-lg bg-[#0F172A]/40 border border-[#F1F5F9]/12 px-2">
-                <option>1024x1024</option><option>768x768</option><option>1536x1024</option>
+              <select value={props.resolution} onChange={(event) => props.onResolution(event.target.value)} className="mt-2 w-full h-9 rounded-lg bg-[#0B1120] text-slate-100 border border-slate-700/80 px-2 focus:border-teal-400 focus:outline-none">
+                <option className="bg-[#0B1120] text-slate-100">1024x1024</option><option className="bg-[#0B1120] text-slate-100">768x768</option><option className="bg-[#0B1120] text-slate-100">1536x1024</option>
               </select>
             </label>
           )}
           {(props.model.inputType === "Audio" || props.model.category === "Speech recognition") && (
             <label className="block text-xs text-[#CBD5E1]">Language
-              <select value={props.language} onChange={(event) => props.onLanguage(event.target.value)} className="mt-2 w-full h-9 rounded-lg bg-[#0F172A]/40 border border-[#F1F5F9]/12 px-2">
-                {props.model.supportedLanguages.map((language) => <option key={language}>{language}</option>)}
+              <select value={props.language} onChange={(event) => props.onLanguage(event.target.value)} className="mt-2 w-full h-9 rounded-lg bg-[#0B1120] text-slate-100 border border-slate-700/80 px-2 focus:border-teal-400 focus:outline-none">
+                {props.model.supportedLanguages.map((language) => <option className="bg-[#0B1120] text-slate-100" key={language}>{language}</option>)}
               </select>
             </label>
           )}
           {props.model.inputType === "Document" && (
             <label className="block text-xs text-[#CBD5E1]">Output format
-              <select className="mt-2 w-full h-9 rounded-lg bg-[#0F172A]/40 border border-[#F1F5F9]/12 px-2"><option>Structured JSON</option><option>Markdown</option><option>Plain text</option></select>
+              <select className="mt-2 w-full h-9 rounded-lg bg-[#0B1120] text-slate-100 border border-slate-700/80 px-2 focus:border-teal-400 focus:outline-none"><option className="bg-[#0B1120] text-slate-100">Structured JSON</option><option className="bg-[#0B1120] text-slate-100">Markdown</option><option className="bg-[#0B1120] text-slate-100">Plain text</option></select>
             </label>
           )}
           {props.model.inputType === "Video" && (
             <label className="block text-xs text-[#CBD5E1]">Analysis mode
-              <select className="mt-2 w-full h-9 rounded-lg bg-[#0F172A]/40 border border-[#F1F5F9]/12 px-2"><option>Captions + Chapters</option><option>Scene summary</option></select>
+              <select className="mt-2 w-full h-9 rounded-lg bg-[#0B1120] text-slate-100 border border-slate-700/80 px-2 focus:border-teal-400 focus:outline-none"><option className="bg-[#0B1120] text-slate-100">Captions + Chapters</option><option className="bg-[#0B1120] text-slate-100">Scene summary</option></select>
             </label>
           )}
         </>
