@@ -51,6 +51,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { label: "Call Colleague", href: "#voice-service" },
     { label: "Thumbs Up API", href: "#api-service" },
     { label: "Sky Beak LLM", href: "#llm-service" },
+    { label: "Model Hub", href: "/models" },
     { label: "Pricing", href: "#pricing" },
     { label: "Developer Portal", href: "/developer" },
   ];

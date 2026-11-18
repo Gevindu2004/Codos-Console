@@ -33,6 +33,7 @@ import {
   MessageSquare,
   UploadCloud,
   Package,
+  Boxes,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -860,6 +861,17 @@ export const InteractiveConsoleDashboard: React.FC<
               >
                 Developer
               </div>
+              <Link
+                href="/models"
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  isLightTheme
+                    ? "text-[#14213D] hover:bg-[#14213D]/10"
+                    : "text-[#F1F5F9]/75 hover:bg-[#F1F5F9]/10 hover:text-[#F1F5F9]"
+                }`}
+              >
+                <Boxes className="w-4 h-4 text-[#14B8A6]" />
+                <span>Model Hub</span>
+              </Link>
               <Link
                 href="/developer"
                 className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border ${
