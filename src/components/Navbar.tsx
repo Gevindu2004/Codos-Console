@@ -52,12 +52,18 @@ export const Navbar: React.FC<NavbarProps> = ({
     { label: "Thumbs Up API", href: "#api-service" },
     { label: "Sky Beak LLM", href: "#llm-service" },
     { label: "Pricing", href: "#pricing" },
+    { label: "Developer Portal", href: "/developer" },
   ];
 
   const handleNavClick = (
     e: React.MouseEvent<HTMLAnchorElement>,
     item: { label: string; href: string }
   ) => {
+    // External routes (not hash anchors) — navigate directly
+    if (!item.href.startsWith("#")) {
+      window.location.href = item.href;
+      return;
+    }
     e.preventDefault();
     setActiveNav(item.label);
     const targetId = item.href.replace("#", "");
