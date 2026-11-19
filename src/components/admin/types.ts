@@ -5,6 +5,7 @@ import type {
   ModelSubmissionPayload,
   ProductType,
 } from "@/components/developer/types";
+import type { CommercialPricingTier } from "@/lib/commercialPricing";
 
 export type { ProductType, SubmissionStatus } from "@/components/developer/types";
 
@@ -36,11 +37,22 @@ export type AdminSubmissionPayload = ApiSubmissionPayload | ModelSubmissionPaylo
 
 interface AdminSubmissionBase {
   id: string;
+  marketplaceProductId?: string;
+  developerId?: string;
+  slug?: string;
   developerName: string;
   providerType: "via_codos" | "third_party";
   automatedChecks: Record<AutomatedCheckKey, AutomatedCheckResult>;
   reviewNotes: string;
   submittedAt: string;
+  basePrice?: number;
+  pricingTier?: CommercialPricingTier | null;
+  profitMarginPercent?: number;
+  finalRetailPrice?: number;
+  agreementSigned?: boolean;
+  agreementSignedBy?: string | null;
+  agreementSignedAt?: string | null;
+  agreementVersion?: string;
 }
 
 export type AdminSubmissionItem = AdminSubmissionBase & (
@@ -58,6 +70,14 @@ export interface AdminLiveProduct {
   status: "Published" | "Suspended" | "Unpublished";
   featured: boolean;
   updatedAt: string;
+  basePrice?: number;
+  pricingTier?: CommercialPricingTier | null;
+  profitMarginPercent?: number;
+  finalRetailPrice?: number;
+  agreementSigned?: boolean;
+  agreementSignedBy?: string | null;
+  agreementSignedAt?: string | null;
+  agreementVersion?: string;
   complianceReason?: string;
   submissionId?: string;
 }

@@ -23,6 +23,10 @@ import {
   type MarketplaceIntegrationMetadata,
   type MarketplaceProductRecord,
 } from "@/lib/developerApi";
+import {
+  calculateFinalRetailPrice,
+  type CommercialSignoffInput,
+} from "@/lib/commercialPricing";
 
 const STORE_KEY = "codos-marketplace-store-v1";
 const CURRENT_DEVELOPER_KEY = "currentDeveloperId";
@@ -40,6 +44,14 @@ export type SharedProduct = AdminSubmissionItem & {
   gatewayUrl: string;
   publicPageUrl: string;
   integrationSnippets: MarketplaceIntegrationMetadata["integration_snippets"];
+  basePrice: number;
+  pricingTier: CommercialSignoffInput["pricing_tier"] | null;
+  profitMarginPercent: number;
+  finalRetailPrice: number;
+  agreementSigned: boolean;
+  agreementSignedBy: string | null;
+  agreementSignedAt: string | null;
+  agreementVersion: string;
   updatedAt: string;
   featured?: boolean;
   auditLogs: Array<{ timestamp: string; actor: string; action: string; details?: Record<string, unknown> }>;
@@ -79,7 +91,14 @@ export function readMarketplaceStore(): MarketplaceStoreState {
   return {
     developers: Array.isArray(parsed.developers) ? parsed.developers : [],
     products: products.map((product) => {
-      if (product.gatewayUrl && product.publicPageUrl && isIntegrationSnippets(product.integrationSnippets)) return product;
+      const hasIntegrationMetadata =
+        product.gatewayUrl && product.publicPageUrl && isIntegrationSnippets(product.integrationSnippets);
+      const hasCommercialMetadata =
+        typeof product.basePrice === "number" &&
+        typeof product.profitMarginPercent === "number" &&
+        typeof product.finalRetailPrice === "number" &&
+        typeof product.agreementSigned === "boolean";
+      if (hasIntegrationMetadata && hasCommercialMetadata) return product;
       let ioSchema: Record<string, unknown> | null = null;
       if (product.productType === "model" && product.payload.formC.schemaJson?.trim()) {
         try {
@@ -104,6 +123,14 @@ export function readMarketplaceStore(): MarketplaceStoreState {
         integrationSnippets: isIntegrationSnippets(product.integrationSnippets)
           ? product.integrationSnippets
           : metadata.integration_snippets,
+        basePrice: product.basePrice ?? 0,
+        pricingTier: product.pricingTier ?? null,
+        profitMarginPercent: product.profitMarginPercent ?? 0,
+        finalRetailPrice: product.finalRetailPrice ?? 0,
+        agreementSigned: product.agreementSigned ?? false,
+        agreementSignedBy: product.agreementSignedBy ?? null,
+        agreementSignedAt: product.agreementSignedAt ?? null,
+        agreementVersion: product.agreementVersion ?? "v1.0",
       };
     }),
   };
@@ -360,6 +387,14 @@ export function upsertMarketplaceProduct(
     gatewayUrl: metadata.gateway_url,
     publicPageUrl: metadata.public_page_url,
     integrationSnippets: metadata.integration_snippets,
+    basePrice: savedRecord?.base_price ?? existing?.basePrice ?? 0,
+    pricingTier: savedRecord?.pricing_tier ?? existing?.pricingTier ?? null,
+    profitMarginPercent: savedRecord?.profit_margin_percent ?? existing?.profitMarginPercent ?? 0,
+    finalRetailPrice: savedRecord?.final_retail_price ?? existing?.finalRetailPrice ?? 0,
+    agreementSigned: savedRecord?.agreement_signed ?? existing?.agreementSigned ?? false,
+    agreementSignedBy: savedRecord?.agreement_signed_by ?? existing?.agreementSignedBy ?? null,
+    agreementSignedAt: savedRecord?.agreement_signed_at ?? existing?.agreementSignedAt ?? null,
+    agreementVersion: savedRecord?.agreement_version ?? existing?.agreementVersion ?? "v1.0",
     developerId: payload.formA.developerId,
     developerName,
     providerType: "third_party" as const,
@@ -381,6 +416,63 @@ export function upsertMarketplaceProduct(
       : [item, ...state.products],
   });
   return item;
+}
+
+export function applyMarketplaceCommercialSignoff(
+  id: string,
+  signoff: CommercialSignoffInput,
+  savedRecord?: MarketplaceProductRecord | null,
+): SharedProduct {
+  const state = readMarketplaceStore();
+  const product = state.products.find(
+    (entry) => entry.id === id || entry.marketplaceProductId === id,
+  );
+  if (!product) throw new Error(`Product submission ${id} was not found.`);
+  if (product.payload.status !== "Approved" && product.payload.status !== "Published") {
+    throw new Error("Commercial sign-off is available only for approved products.");
+  }
+  const timestamp = savedRecord?.agreement_signed_at ?? new Date().toISOString();
+  const pricingTier = savedRecord?.pricing_tier ?? signoff.pricing_tier;
+  const basePrice = savedRecord?.base_price ?? signoff.base_price;
+  const profitMarginPercent = savedRecord?.profit_margin_percent
+    ?? ({ "Tier 1": 25, "Tier 2": 17.5, "Tier 3": 12.5 }[pricingTier]);
+  const finalRetailPrice = savedRecord?.final_retail_price
+    ?? calculateFinalRetailPrice(basePrice, pricingTier);
+  const auditLogs = savedRecord?.audit_logs ?? [
+    ...product.auditLogs,
+    {
+      timestamp,
+      actor: signoff.agreement_signed_by,
+      action: "Commercial agreement signed and product published",
+      details: {
+        base_price: basePrice,
+        pricing_tier: pricingTier,
+        profit_margin_percent: profitMarginPercent,
+        final_retail_price: finalRetailPrice,
+        agreement_version: savedRecord?.agreement_version ?? "v1.0",
+      },
+    },
+  ];
+  const sharedFields = {
+    basePrice,
+    pricingTier,
+    profitMarginPercent,
+    finalRetailPrice,
+    agreementSigned: savedRecord?.agreement_signed ?? true,
+    agreementSignedBy: savedRecord?.agreement_signed_by ?? signoff.agreement_signed_by,
+    agreementSignedAt: timestamp,
+    agreementVersion: savedRecord?.agreement_version ?? "v1.0",
+    updatedAt: savedRecord?.updated_at ?? timestamp,
+    auditLogs,
+  };
+  const next: SharedProduct = product.productType === "api"
+    ? { ...product, ...sharedFields, payload: { ...product.payload, status: "Published" } }
+    : { ...product, ...sharedFields, payload: { ...product.payload, status: "Published" } };
+  notifyStore({
+    ...state,
+    products: state.products.map((entry) => entry.id === product.id ? next : entry),
+  });
+  return next;
 }
 
 export function updateProductReview(
@@ -413,10 +505,10 @@ export function updateProductReview(
     ...state,
     products: state.products.map((entry) => entry.id === id ? next : entry),
   });
-  if (next.marketplaceProductId && ["Published", "Changes Requested", "Rejected", "Suspended"].includes(status)) {
+  if (next.marketplaceProductId && ["Approved", "Published", "Changes Requested", "Rejected", "Suspended"].includes(status)) {
     void updateMarketplaceProductStatus(
       next.marketplaceProductId,
-      status as "Published" | "Changes Requested" | "Rejected" | "Suspended",
+      status as "Approved" | "Published" | "Changes Requested" | "Rejected" | "Suspended",
       reviewNotes,
       next.auditLogs,
     )
@@ -533,6 +625,14 @@ export async function syncMarketplaceProductsFromBackend(): Promise<void> {
         integrationSnippets: isIntegrationSnippets(record.integration_snippets)
           ? record.integration_snippets
           : fallbackMetadata.integration_snippets,
+        basePrice: record.base_price ?? current?.basePrice ?? 0,
+        pricingTier: record.pricing_tier ?? current?.pricingTier ?? null,
+        profitMarginPercent: record.profit_margin_percent ?? current?.profitMarginPercent ?? 0,
+        finalRetailPrice: record.final_retail_price ?? current?.finalRetailPrice ?? 0,
+        agreementSigned: record.agreement_signed ?? current?.agreementSigned ?? false,
+        agreementSignedBy: record.agreement_signed_by ?? current?.agreementSignedBy ?? null,
+        agreementSignedAt: record.agreement_signed_at ?? current?.agreementSignedAt ?? null,
+        agreementVersion: record.agreement_version ?? current?.agreementVersion ?? "v1.0",
         developerId: record.developer_id,
         developerName: current?.developerName ?? developer?.developerName ?? record.developer_id,
         providerType: record.provider_type,
@@ -639,7 +739,30 @@ export function sharedProductsToAdmin(
   products: SharedProduct[],
   firstParty: AdminLiveProduct[],
 ): { submissions: AdminSubmissionItem[]; liveProducts: AdminLiveProduct[] } {
-  const submissions = products.map(({ developerId: _developerId, marketplaceProductId: _dbId, slug: _slug, updatedAt: _updatedAt, featured: _featured, auditLogs: _auditLogs, ...submission }) => submission);
+  const submissions = products.map((product): AdminSubmissionItem => {
+    const common = {
+      id: product.id,
+      marketplaceProductId: product.marketplaceProductId,
+      developerId: product.developerId,
+      slug: product.slug,
+      developerName: product.developerName,
+      providerType: product.providerType,
+      automatedChecks: product.automatedChecks,
+      reviewNotes: product.reviewNotes,
+      submittedAt: product.submittedAt,
+      basePrice: product.basePrice,
+      pricingTier: product.pricingTier,
+      profitMarginPercent: product.profitMarginPercent,
+      finalRetailPrice: product.finalRetailPrice,
+      agreementSigned: product.agreementSigned,
+      agreementSignedBy: product.agreementSignedBy,
+      agreementSignedAt: product.agreementSignedAt,
+      agreementVersion: product.agreementVersion,
+    };
+    return product.productType === "api"
+      ? { ...common, productType: "api", payload: product.payload }
+      : { ...common, productType: "model", payload: product.payload };
+  });
   const liveProducts = products
     .filter((product) => ["Published", "Suspended", "Unpublished"].includes(product.payload.status))
     .map((product) => ({
@@ -652,6 +775,14 @@ export function sharedProductsToAdmin(
       status: product.payload.status as AdminLiveProduct["status"],
         featured: Boolean(product.featured),
       updatedAt: product.updatedAt,
+      basePrice: product.basePrice,
+      pricingTier: product.pricingTier,
+      profitMarginPercent: product.profitMarginPercent,
+      finalRetailPrice: product.finalRetailPrice,
+      agreementSigned: product.agreementSigned,
+      agreementSignedBy: product.agreementSignedBy,
+      agreementSignedAt: product.agreementSignedAt,
+      agreementVersion: product.agreementVersion,
       complianceReason: product.reviewNotes || undefined,
       submissionId: product.id,
     }));

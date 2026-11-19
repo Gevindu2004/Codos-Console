@@ -262,32 +262,24 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     const current = stateRef.current;
     const item = current.submissions.find((entry) => entry.id === id);
     if (!item) throw new Error(`Submission ${id} was not found.`);
-    if (item.payload.status !== "Under Review" && item.payload.status !== "Approved") {
-      throw new Error("Only submissions that have completed checks and reached review can be published.");
+    if (item.payload.status !== "Under Review") {
+      throw new Error("Only submissions that have completed checks and reached review can be approved.");
     }
     if (Object.values(item.automatedChecks).some((result) => result.status === "pending" || result.status === "fail")) {
       throw new Error("Automated checks must be complete with no failures before publication.");
     }
     const name = payloadName(item);
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    const liveProduct = {
-      id: item.id,
-      slug,
-      name,
-      productType: item.productType,
-      providerType: item.providerType,
-      developerName: item.developerName,
-      status: "Published" as const,
-      featured: false,
-      updatedAt: new Date().toISOString(),
-      submissionId: item.id,
-    };
-    updateProductReview(id, "Published", "");
+    updateProductReview(id, "Approved", "");
+    const shared = sharedProductsToAdmin(
+      readMarketplaceStore().products,
+      current.liveProducts.filter((product) => product.providerType === "via_codos"),
+    );
     commit({
       ...current,
-      liveProducts: [liveProduct, ...current.liveProducts.filter((entry) => entry.id !== item.id)],
+      submissions: shared.submissions,
+      liveProducts: shared.liveProducts,
       auditEvents: [
-        makeEvent("Submission", id, "Submission approved and published", name, `${item.payload.status} → Approved → Published`),
+        makeEvent("Submission", id, "Submission approved; commercial sign-off required", name, `${item.payload.status} → Approved`),
         ...current.auditEvents,
       ],
     });

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CheckCircle2, CircleAlert, X, XCircle } from "lucide-react";
 import { useAdmin } from "./AdminContext";
 import type { AdminSubmissionItem, AutomatedCheckKey } from "./types";
+import { CommercialSignOffModal } from "@/components/developer/CommercialSignOffModal";
 
 const checkLabels: Record<AutomatedCheckKey, string> = {
   httpsEndpoint: "HTTPS & SSL Check",
@@ -44,6 +45,7 @@ export function SubmissionReviewDrawer({
   } = useAdmin();
   const [feedback, setFeedback] = useState("");
   const [error, setError] = useState("");
+  const [commercialSignoffOpen, setCommercialSignoffOpen] = useState(false);
 
   if (!submission) return null;
 
@@ -117,8 +119,23 @@ export function SubmissionReviewDrawer({
         <footer className="flex flex-wrap justify-end gap-2 border-t border-slate-700 bg-[#0B1120] px-6 py-4">
           <button onClick={() => execute(() => requestSubmissionChanges(submission.id, feedback))} className="rounded-lg border border-amber-400/50 px-3.5 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-400/10">Request Changes</button>
           <button onClick={() => execute(() => rejectSubmission(submission.id, feedback))} className="rounded-lg border border-rose-400/50 px-3.5 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-400/10">Reject</button>
-          <button disabled={!canPublish} onClick={() => execute(() => approveAndPublishSubmission(submission.id))} className="rounded-lg bg-teal-400 px-3.5 py-2 text-sm font-bold text-slate-950 hover:bg-teal-300 disabled:cursor-not-allowed disabled:opacity-40">Approve & Publish</button>
+          {submission.payload.status === "Approved" && (
+            <button onClick={() => setCommercialSignoffOpen(true)} className="rounded-lg bg-teal-400 px-3.5 py-2 text-sm font-bold text-slate-950 hover:bg-teal-300">
+              Sign Agreement &amp; Set Pricing
+            </button>
+          )}
+          {canPublish && (
+            <button onClick={() => execute(() => approveAndPublishSubmission(submission.id))} className="rounded-lg bg-teal-400 px-3.5 py-2 text-sm font-bold text-slate-950 hover:bg-teal-300">
+              Approve for Agreement &amp; Pricing
+            </button>
+          )}
         </footer>
+        {commercialSignoffOpen && (
+          <CommercialSignOffModal
+            product={submission}
+            onClose={() => setCommercialSignoffOpen(false)}
+          />
+        )}
       </aside>
     </div>
   );

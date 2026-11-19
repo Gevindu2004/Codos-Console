@@ -8,6 +8,7 @@ import type {
   DeveloperProfile,
   SubmissionStatus,
 } from "../components/developer/types";
+import type { CommercialSignoffInput, CommercialPricingTier } from "./commercialPricing";
 
 const baseURL = process.env.NEXT_PUBLIC_API_URL ?? "/api/v1/developer";
 export const apiV1BaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -67,6 +68,14 @@ export interface MarketplaceProductRecord {
   io_schema: Record<string, unknown> | null;
   pricing_model: string;
   pricing_plans: Array<Record<string, unknown>> | null;
+  base_price?: number;
+  pricing_tier?: CommercialPricingTier | null;
+  profit_margin_percent?: number;
+  final_retail_price: number;
+  agreement_signed?: boolean;
+  agreement_signed_by?: string | null;
+  agreement_signed_at?: string | null;
+  agreement_version?: string;
   rate_limit_rpm: number;
   avg_latency_ms: number | null;
   status: SubmissionStatus;
@@ -419,7 +428,7 @@ export async function getPublishedMarketplaceProduct(slug: string): Promise<Mark
 
 export async function updateMarketplaceProductStatus(
   id: string,
-  status: "Published" | "Changes Requested" | "Rejected" | "Suspended",
+  status: "Approved" | "Published" | "Changes Requested" | "Rejected" | "Suspended",
   reviewNotes: string,
   auditLogs: Array<{ timestamp: string; actor: string; action: string; details?: Record<string, unknown> }>,
 ): Promise<MarketplaceProductRecord> {
@@ -431,6 +440,30 @@ export async function updateMarketplaceProductStatus(
     body: JSON.stringify({ status, review_notes: reviewNotes, audit_logs: auditLogs }),
   });
   if (!response.ok) throw new Error(`Marketplace status update failed (${response.status}).`);
+  return response.json() as Promise<MarketplaceProductRecord>;
+}
+
+export async function postMarketplaceCommercialSignoff(
+  id: string,
+  payload: CommercialSignoffInput,
+): Promise<MarketplaceProductRecord | null> {
+  let response: Response;
+  try {
+    response = await fetch(
+      `${apiV1BaseUrl}/marketplace/products/${encodeURIComponent(id)}/commercial-signoff`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+  } catch {
+    return null;
+  }
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null) as { detail?: string } | null;
+    throw new Error(detail?.detail || `Commercial sign-off failed (${response.status}).`);
+  }
   return response.json() as Promise<MarketplaceProductRecord>;
 }
 

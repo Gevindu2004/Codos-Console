@@ -308,10 +308,18 @@ function parseOpenApiSpec(raw: string): ApiEndpointSpec[] {
 }
 
 function marketplacePricingPlans(product: MarketplaceProductRecord): ApiPricingPlan[] {
+  const planUnit = product.pricing_model.includes("month") || product.pricing_model === "subscription"
+    ? "month"
+    : product.pricing_model === "per_token"
+      ? "1K tokens"
+      : product.pricing_model === "per_image"
+        ? "image"
+        : "request";
+  const retailPrice = `$${product.final_retail_price.toFixed(6)} / ${planUnit}`;
   if (!product.pricing_plans?.length) {
-    return plans("$0.001 / request", product.rate_limit_rpm, 10000);
+    return plans(retailPrice, product.rate_limit_rpm, 10000);
   }
-  return product.pricing_plans.map((plan, index) => {
+  const marketplacePlans = product.pricing_plans.map((plan, index) => {
     const rawModel = String(plan.pricing_model ?? product.pricing_model);
     const pricingModel: ApiPricingModel = ["free", "pay_per_request", "monthly_subscription", "tiered"].includes(rawModel)
       ? rawModel as ApiPricingModel
@@ -328,13 +336,17 @@ function marketplacePricingPlans(product: MarketplaceProductRecord): ApiPricingP
       description: typeof plan.description === "string" ? plan.description : "Developer-defined marketplace plan.",
     };
   });
+  return marketplacePlans.map((plan) => ({
+    ...plan,
+    priceDisplay: plan.pricingModel === "free" ? "Free" : retailPrice,
+    overageRate: plan.pricingModel === "free" ? "Not available" : retailPrice,
+  }));
 }
 
 function normalizeLocalMarketplaceApis(): MarketplaceApi[] {
   return readMarketplaceStore().products.flatMap((product) => {
-      if (product.productType !== "api" || product.payload.status !== "Published") return [];
+      if (product.productType !== "api" || product.payload.status !== "Published" || !product.agreementSigned) return [];
       const payload = product.payload;
-      const price = payload.formE.pricePerRequest ?? 0;
       return [{
         id: product.marketplaceProductId ?? product.id,
         slug: product.slug,
@@ -353,7 +365,11 @@ function normalizeLocalMarketplaceApis(): MarketplaceApi[] {
         avgLatencyMs: product.payload.formB.timeoutMs ?? 250,
         rateLimitRpm: payload.formE.rpm ?? 60,
         endpoints: parseOpenApiSpec(payload.formC.openApiSpec),
-        pricingPlans: plans(`$${price.toFixed(4)} / request`, payload.formE.rpm ?? 60, payload.formE.monthlyLimit ?? 10000),
+        pricingPlans: plans(
+          `$${product.finalRetailPrice.toFixed(6)} / request`,
+          payload.formE.rpm ?? 60,
+          payload.formE.monthlyLimit ?? 10000,
+        ),
         status: payload.status,
       }];
     });

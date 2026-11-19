@@ -18,7 +18,9 @@ from app.schemas.marketplace import (
     MarketplaceDeveloperCreate,
     MarketplaceDeveloperRead,
     MarketplaceDeveloperStatusUpdate,
+    MarketplaceCommercialSignoff,
     MarketplaceProductCreate,
+    MarketplaceProductPublicRead,
     MarketplaceProductRead,
     MarketplaceProductStatusUpdate,
 )
@@ -303,11 +305,14 @@ async def create_product(
     return product
 
 
-@router.get("/products", response_model=list[MarketplaceProductRead])
+@router.get("/products", response_model=list[MarketplaceProductPublicRead])
 async def list_published_products(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(MarketplaceProduct)
-        .where(MarketplaceProduct.status == "Published")
+        .where(
+            MarketplaceProduct.status == "Published",
+            MarketplaceProduct.agreement_signed.is_(True),
+        )
         .order_by(MarketplaceProduct.created_at.desc())
     )
     return result.scalars().all()
@@ -323,12 +328,13 @@ async def list_all_products_for_admin(
     return result.scalars().all()
 
 
-@router.get("/products/{slug}", response_model=MarketplaceProductRead)
+@router.get("/products/{slug}", response_model=MarketplaceProductPublicRead)
 async def get_published_product(slug: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(MarketplaceProduct).where(
             MarketplaceProduct.slug == slug,
             MarketplaceProduct.status == "Published",
+            MarketplaceProduct.agreement_signed.is_(True),
         )
     )
     product = result.scalar_one_or_none()
@@ -349,9 +355,70 @@ async def update_product_status(
     product = await db.get(MarketplaceProduct, product_id)
     if product is None:
         raise HTTPException(status_code=404, detail="Marketplace product not found.")
+    if payload.status == "Published" and not product.agreement_signed:
+        raise HTTPException(
+            status_code=409,
+            detail="A product must complete commercial agreement sign-off before it can be published.",
+        )
     product.status = payload.status
     product.review_notes = payload.review_notes
     product.audit_logs = payload.audit_logs
+    await db.commit()
+    await db.refresh(product)
+    return product
+
+
+@router.post(
+    "/products/{product_id}/commercial-signoff",
+    response_model=MarketplaceProductRead,
+)
+async def sign_off_product_commercial_terms(
+    product_id: str,
+    payload: MarketplaceCommercialSignoff,
+    db: AsyncSession = Depends(get_db),
+):
+    product = await db.get(MarketplaceProduct, product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="Marketplace product not found.")
+    if product.status not in {"Approved", "Published"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Commercial sign-off is available only for approved products.",
+        )
+    if not payload.agreement_signed:
+        raise HTTPException(status_code=422, detail="The commercial agreement must be accepted.")
+    signatory = payload.agreement_signed_by.strip()
+    if not signatory:
+        raise HTTPException(status_code=422, detail="An authorized signatory name is required.")
+
+    margin_percent = {"Tier 1": 25.0, "Tier 2": 17.5, "Tier 3": 12.5}[payload.pricing_tier]
+    margin_rate = margin_percent / 100
+    final_price = round(payload.base_price * (1 + margin_rate), 6)
+    signed_at = datetime.utcnow()
+    product.base_price = payload.base_price
+    product.pricing_tier = payload.pricing_tier
+    product.profit_margin_percent = margin_percent
+    product.final_retail_price = final_price
+    product.agreement_signed = True
+    product.agreement_signed_by = signatory
+    product.agreement_signed_at = signed_at
+    product.agreement_version = "v1.0"
+    product.status = "Published"
+    product.audit_logs = [
+        *(product.audit_logs or []),
+        {
+            "timestamp": signed_at.isoformat(),
+            "actor": signatory,
+            "action": "Commercial agreement signed and product published",
+            "details": {
+                "base_price": payload.base_price,
+                "pricing_tier": payload.pricing_tier,
+                "profit_margin_percent": margin_percent,
+                "final_retail_price": final_price,
+                "agreement_version": product.agreement_version,
+            },
+        },
+    ]
     await db.commit()
     await db.refresh(product)
     return product

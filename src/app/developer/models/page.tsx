@@ -7,6 +7,7 @@ import { SubmissionStatusBadge, AuditHistoryModal } from "@/components/developer
 import type { ModelSubmissionPayload } from "@/components/developer/types";
 import { Code2, Edit, Eye, Upload } from "lucide-react";
 import { IntegrationPanel } from "@/components/developer/IntegrationPanel";
+import { CommercialSignOffModal } from "@/components/developer/CommercialSignOffModal";
 import type { SharedProduct } from "@/lib/marketplaceStore";
 import {
   cacheSubmissionForPublish,
@@ -20,6 +21,7 @@ export default function MyModels() {
   const [auditTarget, setAuditTarget] = useState<string>("");
   const [actionError, setActionError] = useState("");
   const [integrationTarget, setIntegrationTarget] = useState<SharedProduct | null>(null);
+  const [commercialTarget, setCommercialTarget] = useState<SharedProduct | null>(null);
 
   const openAudit = (name: string) => {
     setAuditTarget(name);
@@ -108,6 +110,14 @@ export default function MyModels() {
                           <Code2 className="w-3 h-3" /> Integration / Code
                         </button>
                       )}
+                      {product && model.status === "Approved" && (
+                        <button
+                          onClick={() => setCommercialTarget(product)}
+                          className="flex items-center gap-1 rounded-md bg-teal-400/10 px-2 py-1 text-teal-200 hover:bg-teal-400/20"
+                        >
+                          Sign Agreement &amp; Set Pricing
+                        </button>
+                      )}
                       <button
                         onClick={() => openAudit(product?.id ?? model.formA.modelName)}
                         className="flex items-center gap-1 text-[#CBD5E1] hover:text-[#F1F5F9] cursor-pointer"
@@ -160,6 +170,9 @@ export default function MyModels() {
       />
       {integrationTarget && (
         <IntegrationPanel product={integrationTarget} onClose={() => setIntegrationTarget(null)} />
+      )}
+      {commercialTarget && (
+        <CommercialSignOffModal product={commercialTarget} onClose={() => setCommercialTarget(null)} />
       )}
     </div>
   );

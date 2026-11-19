@@ -401,8 +401,9 @@ function normalizeMarketplaceModels(products: Awaited<ReturnType<typeof getPubli
       const pricingModel = pricingModels.includes(rawPricing as PricingModel)
         ? rawPricing as PricingModel
         : "per_inference";
-      const plan = product.pricing_plans?.[0];
-      const rate = typeof plan?.rate === "number" ? plan.rate : null;
+      const retailDisplay = pricingModel === "free"
+        ? null
+        : `$${product.final_retail_price.toFixed(6)}`;
       return {
         id: product.id,
         slug: product.slug,
@@ -427,8 +428,8 @@ function normalizeMarketplaceModels(products: Awaited<ReturnType<typeof getPubli
         outputSchema: (ioSchema.output as Record<string, unknown> | undefined) ?? {},
         sampleInputs: [],
         pricingModel,
-        priceDisplay: rate === null ? (pricingModel === "free" ? "Free" : "Custom") : `$${rate}`,
-        unitLabel: pricingModel === "per_token" ? "per token" : "per inference",
+        priceDisplay: retailDisplay ?? "Free",
+        unitLabel: pricingModel === "per_token" ? "per 1K tokens" : "per inference",
         freeTierAllowance: "See pricing plans",
         avgLatencyMs: product.avg_latency_ms ?? 900,
         status: "Published",
@@ -436,7 +437,7 @@ function normalizeMarketplaceModels(products: Awaited<ReturnType<typeof getPubli
         plans: product.pricing_plans?.map((pricingPlan) => ({
           name: String(pricingPlan.name ?? "Developer plan"),
           description: String(pricingPlan.description ?? "Developer-defined model pricing."),
-          price: String(pricingPlan.price ?? (typeof pricingPlan.rate === "number" ? `$${pricingPlan.rate}` : "Custom")),
+          price: retailDisplay ?? "Free",
         })),
       };
     });
@@ -459,7 +460,7 @@ function normalizeLocalMarketplaceModels(): MarketplaceModel[] {
     "per_audio_minute", "subscription", "credit_package",
   ];
   return readMarketplaceStore().products.flatMap((product) => {
-    if (product.productType !== "model" || product.payload.status !== "Published") return [];
+    if (product.productType !== "model" || product.payload.status !== "Published" || !product.agreementSigned) return [];
     const payload = product.payload;
     const category = categories.includes(payload.formA.category as ModelCategory)
       ? payload.formA.category as ModelCategory
@@ -508,8 +509,10 @@ function normalizeLocalMarketplaceModels(): MarketplaceModel[] {
       outputSchema: {},
       sampleInputs: payload.formD.sampleInputs || [],
       pricingModel,
-      priceDisplay: payload.formE.rate ? `$${payload.formE.rate}` : pricingModel === "free" ? "Free" : "Custom",
-      unitLabel: billing === "per_token" ? "per token" : "per inference",
+      priceDisplay: product.agreementSigned
+        ? (pricingModel === "free" ? "Free" : `$${product.finalRetailPrice.toFixed(6)}`)
+        : "Custom",
+      unitLabel: billing === "per_token" ? "per 1K tokens" : "per inference",
       freeTierAllowance: "See pricing plans",
       avgLatencyMs: payload.formB.expectedLatencyMs ?? 900,
       status: "Published",

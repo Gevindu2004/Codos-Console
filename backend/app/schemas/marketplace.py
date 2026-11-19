@@ -89,6 +89,14 @@ class MarketplaceProductRead(BaseModel):
     io_schema: dict[str, Any] | None
     pricing_model: str
     pricing_plans: list[dict[str, Any]] | None
+    base_price: float
+    pricing_tier: Literal["Tier 1", "Tier 2", "Tier 3"] | None
+    profit_margin_percent: float
+    final_retail_price: float
+    agreement_signed: bool
+    agreement_signed_by: str | None
+    agreement_signed_at: datetime | None
+    agreement_version: str
     rate_limit_rpm: int
     avg_latency_ms: float | None
     status: str
@@ -98,7 +106,24 @@ class MarketplaceProductRead(BaseModel):
     updated_at: datetime
 
 
+class MarketplaceProductPublicRead(MarketplaceProductRead):
+    base_price: float = Field(exclude=True)
+    pricing_tier: Literal["Tier 1", "Tier 2", "Tier 3"] | None = Field(exclude=True)
+    profit_margin_percent: float = Field(exclude=True)
+    agreement_signed: bool = Field(exclude=True)
+    agreement_signed_by: str | None = Field(exclude=True)
+    agreement_signed_at: datetime | None = Field(exclude=True)
+    agreement_version: str = Field(exclude=True)
+
+
 class MarketplaceProductStatusUpdate(BaseModel):
-    status: Literal["Published", "Changes Requested", "Rejected", "Suspended"]
+    status: Literal["Approved", "Published", "Changes Requested", "Rejected", "Suspended"]
     review_notes: str = ""
     audit_logs: list[dict[str, Any]] | None = None
+
+
+class MarketplaceCommercialSignoff(BaseModel):
+    base_price: float = Field(ge=0, allow_inf_nan=False)
+    pricing_tier: Literal["Tier 1", "Tier 2", "Tier 3"]
+    agreement_signed: bool
+    agreement_signed_by: str = Field(min_length=1, max_length=180)
