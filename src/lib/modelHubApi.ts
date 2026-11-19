@@ -120,13 +120,12 @@ function normalizeSkyBeak(model: CatalogModel): MarketplaceModel {
     pricingModel: "per_token",
     priceDisplay: "$0.0008",
     unitLabel: "per 1K tokens",
-    freeTierAllowance: "50,000 tokens",
     avgLatencyMs: latency,
     status: "Published",
     inputType: "Text",
     skybeakCatalogId: model.id,
     plans: [
-      { name: "Pay as you go", description: "Flexible token billing", price: "$0.0008 / 1K tokens" },
+      { name: "Pay-as-you-go", description: "Flexible token billing", price: "$0.0008 / 1K tokens" },
       { name: "Developer", description: "Monthly quota and priority routing", price: "$49 / month" },
     ],
   };
@@ -159,7 +158,6 @@ const representativeModels: MarketplaceModel[] = [
     pricingModel: "per_inference",
     priceDisplay: "$0.012",
     unitLabel: "per document",
-    freeTierAllowance: "25 documents",
     avgLatencyMs: 860,
     status: "Published",
     inputType: "Document",
@@ -192,7 +190,6 @@ const representativeModels: MarketplaceModel[] = [
     pricingModel: "per_audio_minute",
     priceDisplay: "$0.006",
     unitLabel: "per audio minute",
-    freeTierAllowance: "30 minutes",
     avgLatencyMs: 1250,
     status: "Published",
     inputType: "Audio",
@@ -225,7 +222,6 @@ const representativeModels: MarketplaceModel[] = [
     pricingModel: "per_image",
     priceDisplay: "$0.035",
     unitLabel: "per generated image",
-    freeTierAllowance: "10 images",
     avgLatencyMs: 3200,
     status: "Published",
     inputType: "Image",
@@ -259,7 +255,6 @@ const extraRepresentativeModels: MarketplaceModel[] = [
     pricingModel: "per_audio_minute",
     priceDisplay: "$0.012",
     unitLabel: "per audio minute",
-    freeTierAllowance: "10 minutes",
     avgLatencyMs: 980,
     status: "Published",
     inputType: "Audio",
@@ -290,7 +285,6 @@ const extraRepresentativeModels: MarketplaceModel[] = [
     pricingModel: "per_image",
     priceDisplay: "$0.018",
     unitLabel: "per image",
-    freeTierAllowance: "50 images",
     avgLatencyMs: 740,
     status: "Published",
     inputType: "Image",
@@ -323,7 +317,6 @@ const extraRepresentativeModels: MarketplaceModel[] = [
     pricingModel: "subscription",
     priceDisplay: "$29",
     unitLabel: "per month",
-    freeTierAllowance: "2 datasets",
     avgLatencyMs: 1100,
     status: "Published",
     inputType: "Document",
@@ -354,7 +347,6 @@ const extraRepresentativeModels: MarketplaceModel[] = [
     pricingModel: "per_video_minute",
     priceDisplay: "$0.09",
     unitLabel: "per video minute",
-    freeTierAllowance: "5 minutes",
     avgLatencyMs: 2800,
     status: "Published",
     inputType: "Video",
@@ -376,7 +368,6 @@ function normalizeMarketplaceModels(products: Awaited<ReturnType<typeof getPubli
     "Industry-specific AI",
   ];
   const pricingModels: PricingModel[] = [
-    "free",
     "per_token",
     "per_inference",
     "per_image",
@@ -401,9 +392,7 @@ function normalizeMarketplaceModels(products: Awaited<ReturnType<typeof getPubli
       const pricingModel = pricingModels.includes(rawPricing as PricingModel)
         ? rawPricing as PricingModel
         : "per_inference";
-      const retailDisplay = pricingModel === "free"
-        ? null
-        : `$${product.final_retail_price.toFixed(6)}`;
+      const retailDisplay = `$${product.final_retail_price.toFixed(6)}`;
       return {
         id: product.id,
         slug: product.slug,
@@ -428,16 +417,19 @@ function normalizeMarketplaceModels(products: Awaited<ReturnType<typeof getPubli
         outputSchema: (ioSchema.output as Record<string, unknown> | undefined) ?? {},
         sampleInputs: [],
         pricingModel,
-        priceDisplay: retailDisplay ?? "Free",
+        priceDisplay: retailDisplay,
         unitLabel: pricingModel === "per_token" ? "per 1K tokens" : "per inference",
-        freeTierAllowance: "See pricing plans",
         avgLatencyMs: product.avg_latency_ms ?? 900,
         status: "Published",
         inputType: validInputType as MarketplaceModel["inputType"],
-        plans: product.pricing_plans?.map((pricingPlan) => ({
+        plans: product.pricing_plans?.filter((pricingPlan) => {
+          const pricingModel = String(pricingPlan.pricing_model ?? "").toLowerCase();
+          const name = String(pricingPlan.name ?? "");
+          return pricingModel !== "free" && !/free|trial/i.test(name);
+        }).map((pricingPlan) => ({
           name: String(pricingPlan.name ?? "Developer plan"),
           description: String(pricingPlan.description ?? "Developer-defined model pricing."),
-          price: retailDisplay ?? "Free",
+          price: retailDisplay,
         })),
       };
     });
@@ -456,7 +448,7 @@ function normalizeLocalMarketplaceModels(): MarketplaceModel[] {
     "Industry-specific AI",
   ];
   const pricingModels: PricingModel[] = [
-    "free", "per_token", "per_inference", "per_image", "per_video_minute",
+    "per_token", "per_inference", "per_image", "per_video_minute",
     "per_audio_minute", "subscription", "credit_package",
   ];
   return readMarketplaceStore().products.flatMap((product) => {
@@ -509,11 +501,8 @@ function normalizeLocalMarketplaceModels(): MarketplaceModel[] {
       outputSchema: {},
       sampleInputs: payload.formD.sampleInputs || [],
       pricingModel,
-      priceDisplay: product.agreementSigned
-        ? (pricingModel === "free" ? "Free" : `$${product.finalRetailPrice.toFixed(6)}`)
-        : "Custom",
+      priceDisplay: `$${product.finalRetailPrice.toFixed(6)}`,
       unitLabel: billing === "per_token" ? "per 1K tokens" : "per inference",
-      freeTierAllowance: "See pricing plans",
       avgLatencyMs: payload.formB.expectedLatencyMs ?? 900,
       status: "Published",
       inputType,

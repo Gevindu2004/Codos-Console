@@ -60,9 +60,8 @@ export interface ApiSubmissionFormD {
   upstreamAuthHeader?: string;
 }
 export interface ApiSubmissionFormE {
-  pricingModel: string[]; // e.g. ["free", "pay_per_request"]
+  pricingModel: string[];
   pricePerRequest?: number;
-  freeTrialAllowance?: number;
   monthlyLimit?: number;
   rpm?: number;
   maxConcurrency?: number;
@@ -129,7 +128,7 @@ export interface ModelSubmissionFormD {
   knownLimitations?: string;
 }
 export interface ModelSubmissionFormE {
-  billingUnit: "free" | "per_inference" | "per_image" | "per_video_min" | "per_audio_min" | "per_token" | "subscription" | "credit_package" | "";
+  billingUnit: "per_inference" | "per_image" | "per_video_min" | "per_audio_min" | "per_token" | "subscription" | "credit_package" | "";
   rate?: number;
   limits?: string;
 }

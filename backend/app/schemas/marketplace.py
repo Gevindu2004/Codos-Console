@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 
 class MarketplaceDeveloperCreate(BaseModel):
@@ -58,10 +58,37 @@ class MarketplaceProductCreate(BaseModel):
     upstream_api_key: str | None = Field(default=None, max_length=4096, repr=False)
     openapi_spec: dict[str, Any] | str | None = None
     io_schema: dict[str, Any] | None = None
-    pricing_model: str = Field(default="free", max_length=64)
+    pricing_model: str = Field(default="pay_per_request", max_length=64)
     pricing_plans: list[dict[str, Any]] | None = None
     rate_limit_rpm: int = Field(default=60, ge=1, le=1_000_000)
     avg_latency_ms: float | None = Field(default=None, ge=0)
+
+    @field_validator("pricing_model")
+    @classmethod
+    def require_paid_pricing_model(cls, value: str) -> str:
+        normalized = value.casefold().replace("_", " ").replace("-", " ")
+        if "free" in normalized or "trial" in normalized:
+            raise ValueError("Marketplace products must use paid pricing.")
+        return value
+
+    @field_validator("pricing_plans")
+    @classmethod
+    def require_paid_pricing_plans(
+        cls,
+        value: list[dict[str, Any]] | None,
+    ) -> list[dict[str, Any]] | None:
+        for plan in value or []:
+            pricing_model = str(plan.get("pricing_model", "")).casefold()
+            name = str(plan.get("name", "")).casefold()
+            if (
+                "free" in pricing_model
+                or "trial" in pricing_model
+                or "free" in name
+                or "trial" in name
+                or "free_trial_allowance" in plan
+            ):
+                raise ValueError("Marketplace pricing plans cannot include free or trial options.")
+        return value
 
 
 class MarketplaceProductRead(BaseModel):

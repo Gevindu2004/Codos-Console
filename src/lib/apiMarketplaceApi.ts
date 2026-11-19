@@ -16,16 +16,6 @@ import type {
 
 const plans = (price: string, rpm: number, limit: number): ApiPricingPlan[] => [
   {
-    id: "free",
-    name: "Free / Trial",
-    pricingModel: "free",
-    priceDisplay: "Free",
-    monthlyRequestLimit: Math.min(limit, 1000),
-    rateLimitRpm: Math.min(rpm, 60),
-    overageRate: "Not available",
-    description: "Evaluate the API with a small monthly request allowance.",
-  },
-  {
     id: "pay-per-request",
     name: "Pay-per-Request",
     pricingModel: "pay_per_request",
@@ -316,12 +306,17 @@ function marketplacePricingPlans(product: MarketplaceProductRecord): ApiPricingP
         ? "image"
         : "request";
   const retailPrice = `$${product.final_retail_price.toFixed(6)} / ${planUnit}`;
-  if (!product.pricing_plans?.length) {
+  const paidPricingPlans = product.pricing_plans?.filter((plan) => {
+    const pricingModel = String(plan.pricing_model ?? "").toLowerCase();
+    const name = String(plan.name ?? "");
+    return pricingModel !== "free" && !/free|trial/i.test(name);
+  });
+  if (!paidPricingPlans?.length) {
     return plans(retailPrice, product.rate_limit_rpm, 10000);
   }
-  const marketplacePlans = product.pricing_plans.map((plan, index) => {
+  const marketplacePlans = paidPricingPlans.map((plan, index) => {
     const rawModel = String(plan.pricing_model ?? product.pricing_model);
-    const pricingModel: ApiPricingModel = ["free", "pay_per_request", "monthly_subscription", "tiered"].includes(rawModel)
+    const pricingModel: ApiPricingModel = ["pay_per_request", "monthly_subscription", "tiered"].includes(rawModel)
       ? rawModel as ApiPricingModel
       : "pay_per_request";
     const requestPrice = typeof plan.price_per_request === "number" ? plan.price_per_request : null;
@@ -329,7 +324,7 @@ function marketplacePricingPlans(product: MarketplaceProductRecord): ApiPricingP
       id: `${product.slug}-plan-${index + 1}`,
       name: String(plan.name ?? rawModel.replaceAll("_", " ")),
       pricingModel,
-      priceDisplay: requestPrice === null ? (pricingModel === "free" ? "Free" : "Custom") : `$${requestPrice} / request`,
+      priceDisplay: requestPrice === null ? "Custom" : `$${requestPrice} / request`,
       monthlyRequestLimit: typeof plan.monthly_limit === "number" ? plan.monthly_limit : null,
       rateLimitRpm: product.rate_limit_rpm,
       overageRate: requestPrice === null ? "Contract rate" : `$${requestPrice} / request`,
@@ -338,8 +333,8 @@ function marketplacePricingPlans(product: MarketplaceProductRecord): ApiPricingP
   });
   return marketplacePlans.map((plan) => ({
     ...plan,
-    priceDisplay: plan.pricingModel === "free" ? "Free" : retailPrice,
-    overageRate: plan.pricingModel === "free" ? "Not available" : retailPrice,
+    priceDisplay: retailPrice,
+    overageRate: retailPrice,
   }));
 }
 
@@ -452,7 +447,6 @@ export const API_AUTH_METHODS: ApiAuthMethod[] = [
 ];
 
 export const API_PRICING_MODELS: ApiPricingModel[] = [
-  "free",
   "pay_per_request",
   "monthly_subscription",
   "tiered",

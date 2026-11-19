@@ -2,7 +2,7 @@
 
 import { Suspense, use, useEffect, useState } from "react";
 import Link from "next/link";
-import { BadgeCheck, Check, ChevronRight, Code2, Copy, DollarSign, Layers3, Play } from "lucide-react";
+import { BadgeCheck, Check, ChevronRight, Code2, Copy, DollarSign, Play } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { SeoFooter } from "@/components/SeoFooter";
 import { getMarketplaceModelBySlug } from "@/lib/modelHubApi";
@@ -100,7 +100,6 @@ function ModelDetailContent({ params }: { params: Promise<{ slug: string }> }) {
               <section className="glass-panel rounded-2xl p-5 space-y-5">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <Info title="Billable unit" value={`${model.priceDisplay} ${model.unitLabel}`} icon={DollarSign} />
-                  <Info title="Free allowance" value={model.freeTierAllowance} icon={Layers3} />
                 </div>
                 <div><h2 className="text-sm font-bold">License & base model</h2><p className="mt-2 text-xs text-[#CBD5E1]">{model.baseModel} · {model.license}</p></div>
                 <div><h2 className="text-sm font-bold">Data retention & usage</h2><p className="mt-2 text-xs text-[#CBD5E1] leading-relaxed">Requests are processed according to the CODOS service policy. Developer-hosted models follow the provider&apos;s declared retention and usage terms. Do not submit regulated or sensitive data without an appropriate subscription agreement.</p></div>

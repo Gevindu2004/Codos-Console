@@ -4,7 +4,7 @@ import { Search } from "lucide-react";
 import { API_AUTH_METHODS, API_CATEGORIES } from "@/lib/apiMarketplaceApi";
 import type { ApiAuthMethod, ApiCategory, ApiProviderType } from "./types";
 
-export type ApiPricingFilter = "All" | "Free Tier" | "Pay-per-Request" | "Monthly Subscription";
+export type ApiPricingFilter = "All" | "Pay-per-Request" | "Monthly Subscription";
 export type ApiSortOption = "Featured" | "Lowest Latency" | "Highest Uptime";
 
 interface Props {
@@ -48,7 +48,7 @@ export default function ApiFilterBar(props: Props) {
           <option className={optionClass} value="All">All Categories</option>{API_CATEGORIES.map((item) => <option className={optionClass} key={item}>{item}</option>)}
         </select>
         <select value={props.pricing} onChange={(event) => props.onPricing(event.target.value as ApiPricingFilter)} className={selectClass}>
-          <option className={optionClass} value="All">All Pricing</option><option className={optionClass}>Free Tier</option><option className={optionClass}>Pay-per-Request</option><option className={optionClass}>Monthly Subscription</option>
+          <option className={optionClass} value="All">All Pricing</option><option className={optionClass}>Pay-per-Request</option><option className={optionClass}>Monthly Subscription</option>
         </select>
         <select value={props.auth} onChange={(event) => props.onAuth(event.target.value as "All" | ApiAuthMethod)} className={selectClass}>
           <option className={optionClass} value="All">All Auth Types</option>{API_AUTH_METHODS.map((item) => <option className={optionClass} key={item}>{item}</option>)}

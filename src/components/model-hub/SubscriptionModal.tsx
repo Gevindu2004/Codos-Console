@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Copy, X } from "lucide-react";
 import type { MarketplaceModel } from "./types";
 
@@ -11,12 +11,27 @@ interface Props {
 }
 
 export default function SubscriptionModal({ model, open, onClose }: Props) {
-  const [plan, setPlan] = useState("Free trial");
+  const [plan, setPlan] = useState("Pay-as-you-go");
   const [activatedPlan, setActivatedPlan] = useState<string | null>(null);
   const [language, setLanguage] = useState("cURL");
   const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setPlan("Pay-as-you-go");
+      setActivatedPlan(null);
+    }
+  }, [open, model?.id]);
   if (!open || !model) return null;
 
+  const planOptions = [
+    { name: "Pay-as-you-go", price: model.priceDisplay },
+    ...(model.plans ?? [])
+      .filter((item) => !/free|trial/i.test(`${item.name} ${item.price}`) && item.name.replace(/[\s-]/g, "").toLowerCase() !== "payasyougo")
+      .filter((item, index, plans) => plans.findIndex((candidate) =>
+        candidate.name.replace(/[\s-]/g, "").toLowerCase() === item.name.replace(/[\s-]/g, "").toLowerCase(),
+      ) === index)
+      .map((item) => ({ name: item.name, price: item.price })),
+  ];
   const endpoint = `https://api.viacodos.com/v1/models/${model.slug}/invoke`;
   const snippets: Record<string, string> = {
     "cURL": `curl -X POST '${endpoint}' \\\n  -H 'Authorization: Bearer $CODOS_API_KEY' \\\n  -H 'Content-Type: application/json' \\\n  -d '{"input":"Hello from CODOS"}'`,
@@ -41,10 +56,10 @@ export default function SubscriptionModal({ model, open, onClose }: Props) {
           <button onClick={onClose} className="w-8 h-8 rounded-lg border border-[#F1F5F9]/12 flex items-center justify-center"><X className="w-4 h-4" /></button>
         </div>
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {["Free trial", "Pay-as-you-go", ...(model.plans?.map((item) => item.name) || [])].filter((value, index, all) => all.indexOf(value) === index).map((name) => (
+          {planOptions.map(({ name, price }) => (
             <button key={name} onClick={() => { setPlan(name); setActivatedPlan(null); }} className={`p-3 rounded-xl border text-left ${plan === name ? "border-[#14B8A6]/60 bg-[#14B8A6]/10" : "border-[#F1F5F9]/12"}`}>
               <span className="text-xs font-bold">{name}</span>
-              <span className="mt-1 block text-[10px] text-[#CBD5E1]">{name === "Free trial" ? model.freeTierAllowance : name === "Pay-as-you-go" ? model.priceDisplay : "Subscription plan"}</span>
+              <span className="mt-1 block text-[10px] text-[#CBD5E1]">{price}</span>
             </button>
           ))}
         </div>

@@ -204,9 +204,8 @@ const initialApiPayload = (developerId: string): ApiSubmissionPayload => ({
   formC: { openApiSpec: "" },
   formD: { authMethod: "", upstreamAuthHeader: "X-API-Key" },
   formE: {
-    pricingModel: [],
+    pricingModel: ["pay_per_request"],
     pricePerRequest: undefined,
-    freeTrialAllowance: undefined,
     monthlyLimit: undefined,
     rpm: undefined,
     maxConcurrency: undefined,
@@ -501,6 +500,9 @@ export const PublishWizard: React.FC = () => {
       }
       if (!apiPayload.formD.authMethod) issues.push("Select an authentication method (choose None if the API is public).");
       if (apiPayload.formD.authMethod !== "none" && !upstreamCredential.trim()) issues.push("Add the upstream authentication credential.");
+      if (!apiPayload.formE.pricingModel.some((pricingModel) => ["pay_per_request", "subscription"].includes(pricingModel))) {
+        issues.push("Select at least one paid pricing model.");
+      }
       if (!apiPayload.formF.ownershipConfirmed) issues.push("Confirm that you own or may distribute this API.");
       if (!apiPayload.formF.commissionAccepted) issues.push("Accept the CODOS commission terms.");
       return issues;
@@ -518,7 +520,15 @@ export const PublishWizard: React.FC = () => {
       if (!modelPayload.formC.outputType) issues.push("Select a model output type.");
       if (!modelPayload.formC.processingMode) issues.push("Select a processing mode.");
       if (!modelPayload.formC.deliveryMethod) issues.push("Select a result delivery method.");
-      if (!modelPayload.formE.billingUnit) issues.push("Select a model billable unit.");
+      if (![
+        "per_inference",
+        "per_image",
+        "per_video_min",
+        "per_audio_min",
+        "per_token",
+        "subscription",
+        "credit_package",
+      ].includes(modelPayload.formE.billingUnit)) issues.push("Select a paid model billable unit.");
       if (modelPayload.formC.schemaJson?.trim() && schemaPreview(modelPayload.formC.schemaJson).startsWith("Schema JSON is invalid")) {
         issues.push("Fix the input/output schema JSON.");
       }
@@ -813,7 +823,6 @@ export const PublishWizard: React.FC = () => {
             <div className="space-y-3">
               <p className="text-xs text-[#CBD5E1]">Pricing models</p>
               {[
-                ["free", "Free tier"],
                 ["pay_per_request", "Pay per request"],
                 ["subscription", "Subscription"],
               ].map(([value, label]) => (
@@ -821,7 +830,6 @@ export const PublishWizard: React.FC = () => {
               ))}
             </div>
             <TextField label="Price per request (USD)" value={numberValue(apiPayload.formE.pricePerRequest)} onChange={(value) => updateApiE({ pricePerRequest: value ? Number(value) : undefined })} type="number" min="0" step="0.000001" placeholder="e.g., 0.001" />
-            <TextField label="Free trial allowance (requests)" value={numberValue(apiPayload.formE.freeTrialAllowance)} onChange={(value) => updateApiE({ freeTrialAllowance: value ? Number(value) : undefined })} type="number" min="0" placeholder="e.g., 100" />
             <TextField label="Monthly request limit" value={numberValue(apiPayload.formE.monthlyLimit)} onChange={(value) => updateApiE({ monthlyLimit: value ? Number(value) : undefined })} type="number" min="0" placeholder="e.g., 10000" />
             <TextField label="Rate limit (requests / minute)" value={numberValue(apiPayload.formE.rpm)} onChange={(value) => updateApiE({ rpm: value ? Number(value) : undefined })} type="number" min="0" placeholder="e.g., 1000" />
             <TextField label="Maximum concurrency" value={numberValue(apiPayload.formE.maxConcurrency)} onChange={(value) => updateApiE({ maxConcurrency: value ? Number(value) : undefined })} type="number" min="0" placeholder="e.g., 10" />
@@ -941,7 +949,7 @@ export const PublishWizard: React.FC = () => {
           <FormCard id="section-e" title="Form E — Model Pricing & Billable Unit" description="Choose the unit used to meter model usage and set rate and limits." highlighted={editorMode === "fix"}>
             <SelectField label="Billable unit" value={modelPayload.formE.billingUnit} onChange={(value) => updateModelE({ billingUnit: value as ModelSubmissionPayload["formE"]["billingUnit"] })}>
               <option className={optionClass} value="">Select a billable unit...</option>
-              <option className={optionClass} value="free">Free</option><option className={optionClass} value="per_inference">Per inference</option><option className={optionClass} value="per_image">Per image</option><option className={optionClass} value="per_video_min">Per video minute</option><option className={optionClass} value="per_audio_min">Per audio minute</option><option className={optionClass} value="per_token">Per token</option><option className={optionClass} value="subscription">Subscription</option><option className={optionClass} value="credit_package">Credit package</option>
+              <option className={optionClass} value="per_inference">Per inference</option><option className={optionClass} value="per_image">Per image</option><option className={optionClass} value="per_video_min">Per video minute</option><option className={optionClass} value="per_audio_min">Per audio minute</option><option className={optionClass} value="per_token">Per token</option><option className={optionClass} value="subscription">Subscription</option><option className={optionClass} value="credit_package">Credit package</option>
             </SelectField>
             <TextField label="Rate (USD per billable unit)" value={numberValue(modelPayload.formE.rate)} onChange={(value) => updateModelE({ rate: value ? Number(value) : undefined })} type="number" min="0" step="0.000001" placeholder="e.g., 0.001" />
             <div className="sm:col-span-2">

@@ -40,7 +40,6 @@ export default function ApiMarketplacePage() {
       if (provider !== "All" && api.providerType !== provider) return false;
       if (category !== "All" && api.category !== category) return false;
       if (auth !== "All" && api.authMethod !== auth) return false;
-      if (pricing === "Free Tier" && !api.pricingPlans.some((plan) => plan.id === "free" && (plan.monthlyRequestLimit ?? 0) > 0)) return false;
       if (pricing === "Pay-per-Request" && !api.pricingPlans.some((plan) => plan.pricingModel === "pay_per_request")) return false;
       if (pricing === "Monthly Subscription" && !api.pricingPlans.some((plan) => plan.pricingModel === "monthly_subscription")) return false;
       if (query && ![api.name, api.tagline, api.description, api.developerName, api.category].join(" ").toLowerCase().includes(query)) return false;

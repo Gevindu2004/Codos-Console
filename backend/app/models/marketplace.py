@@ -62,7 +62,7 @@ class MarketplaceProduct(Base):
     upstream_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     openapi_spec: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     io_schema: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    pricing_model: Mapped[str] = mapped_column(String(64), default="free", nullable=False)
+    pricing_model: Mapped[str] = mapped_column(String(64), default="pay_per_request", nullable=False)
     pricing_plans: Mapped[list | None] = mapped_column(JSON, nullable=True)
     base_price: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     pricing_tier: Mapped[str | None] = mapped_column(String(16), nullable=True)

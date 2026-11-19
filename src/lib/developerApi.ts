@@ -315,6 +315,8 @@ function apiProductSubmission(
   upstreamCredential: string,
 ): MarketplaceProductSubmission {
   const formE = payload.formE;
+  const paidPricingModels = formE.pricingModel.filter((pricingModel) => !/free|trial/i.test(pricingModel));
+  const pricingModels = paidPricingModels.length ? paidPricingModels : ["pay_per_request"];
   return {
     developer_id: payload.formA.developerId,
     provider_type: "third_party",
@@ -332,12 +334,11 @@ function apiProductSubmission(
     upstream_api_key: payload.formD.authMethod !== "none" ? upstreamCredential || null : null,
     openapi_spec: payload.formC.openApiSpec || null,
     io_schema: null,
-    pricing_model: formE.pricingModel[0] || "free",
-    pricing_plans: formE.pricingModel.map((pricingModel) => ({
+    pricing_model: pricingModels[0],
+    pricing_plans: pricingModels.map((pricingModel) => ({
       pricing_model: pricingModel,
       price_per_request: formE.pricePerRequest ?? null,
       monthly_limit: formE.monthlyLimit ?? null,
-      free_trial_allowance: formE.freeTrialAllowance ?? null,
     })),
     rate_limit_rpm: formE.rpm || payload.formB.rateLimit || 60,
     avg_latency_ms: null,
@@ -382,9 +383,9 @@ function modelProductSubmission(
     upstream_api_key: payload.formB.authMethod !== "none" ? upstreamCredential || null : null,
     openapi_spec: null,
     io_schema: ioSchema,
-    pricing_model: payload.formE.billingUnit || "free",
+    pricing_model: payload.formE.billingUnit || "per_inference",
     pricing_plans: [{
-      pricing_model: payload.formE.billingUnit || "free",
+      pricing_model: payload.formE.billingUnit || "per_inference",
       rate: payload.formE.rate ?? null,
       limits: payload.formE.limits ?? null,
     }],

@@ -517,6 +517,11 @@ export function updateProductReview(
   return next;
 }
 
+function isPaidPricingPlan(plan: Record<string, unknown>): boolean {
+  const identifier = `${String(plan.pricing_model ?? "")} ${String(plan.name ?? "")}`;
+  return !/free|trial/i.test(identifier) && !("free_trial_allowance" in plan);
+}
+
 function payloadFromMarketplaceRecord(record: MarketplaceProductRecord & { product_type: "api" }): ApiSubmissionPayload;
 function payloadFromMarketplaceRecord(record: MarketplaceProductRecord & { product_type: "model" }): ModelSubmissionPayload;
 function payloadFromMarketplaceRecord(record: MarketplaceProductRecord): ApiSubmissionPayload | ModelSubmissionPayload;
@@ -525,8 +530,12 @@ function payloadFromMarketplaceRecord(record: MarketplaceProductRecord): ApiSubm
   const healthCheckPath = record.health_check_url
     ? new URL(record.health_check_url).pathname
     : "";
+  const paidPlans = record.pricing_plans?.filter(isPaidPricingPlan) ?? [];
   if (record.product_type === "api") {
-    const firstPlan = record.pricing_plans?.[0];
+    const firstPlan = paidPlans[0];
+    const paidPricingModels = (paidPlans.length ? paidPlans.map((plan) =>
+      String(plan.pricing_model ?? record.pricing_model),
+    ) : [record.pricing_model]).filter((pricingModel) => !/free|trial/i.test(pricingModel));
     return {
       formA: {
         productName: record.name,
@@ -549,10 +558,9 @@ function payloadFromMarketplaceRecord(record: MarketplaceProductRecord): ApiSubm
         upstreamAuthHeader: record.upstream_auth_header ?? undefined,
       },
       formE: {
-        pricingModel: record.pricing_plans?.map((plan) => String(plan.pricing_model ?? record.pricing_model)) ?? [record.pricing_model],
+        pricingModel: paidPricingModels.length ? paidPricingModels : ["pay_per_request"],
         pricePerRequest: typeof firstPlan?.price_per_request === "number" ? firstPlan.price_per_request : undefined,
         monthlyLimit: typeof firstPlan?.monthly_limit === "number" ? firstPlan.monthly_limit : undefined,
-        freeTrialAllowance: typeof firstPlan?.free_trial_allowance === "number" ? firstPlan.free_trial_allowance : undefined,
         rpm: record.rate_limit_rpm,
       },
       formF: {
@@ -562,7 +570,17 @@ function payloadFromMarketplaceRecord(record: MarketplaceProductRecord): ApiSubm
       status: record.status,
     };
   }
-  const pricingPlan = record.pricing_plans?.[0];
+  const pricingPlan = paidPlans[0];
+  const modelBillingUnits = [
+    "per_inference",
+    "per_image",
+    "per_video_min",
+    "per_audio_min",
+    "per_token",
+    "subscription",
+    "credit_package",
+  ] as const;
+  const billingUnit = modelBillingUnits.find((unit) => unit === record.pricing_model) ?? "per_inference";
   return {
     formA: {
       modelName: record.name,
@@ -590,7 +608,7 @@ function payloadFromMarketplaceRecord(record: MarketplaceProductRecord): ApiSubm
     },
     formD: {},
     formE: {
-      billingUnit: record.pricing_model as ModelSubmissionPayload["formE"]["billingUnit"],
+      billingUnit,
       rate: typeof pricingPlan?.rate === "number" ? pricingPlan.rate : undefined,
     },
     formF: {

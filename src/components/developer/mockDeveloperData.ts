@@ -56,7 +56,6 @@ const sampleApi: ApiSubmissionPayload = {
   formE: {
     pricingModel: ["pay_per_request"],
     pricePerRequest: 0.001,
-    freeTrialAllowance: 1000,
     monthlyLimit: 100000,
     rpm: 100,
     maxConcurrency: 5,

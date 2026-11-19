@@ -34,7 +34,6 @@ const terms = [
 ];
 
 const unitLabels: Record<string, string> = {
-  free: "per request",
   pay_per_request: "per request",
   per_inference: "per inference",
   per_token: "per 1K tokens",
