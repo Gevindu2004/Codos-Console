@@ -2,6 +2,8 @@
 
 import React, { useState } from "react";
 import { KpiCard } from "@/components/developer/ui";
+import { useDeveloper } from "@/components/developer/DeveloperContext";
+import { CommercialPricingDetails } from "@/components/developer/CommercialPricingDetails";
 import {
   DollarSign,
   TrendingUp,
@@ -81,8 +83,10 @@ const statusStyles: Record<string, string> = {
 };
 
 export default function EarningsPage() {
+  const { apiProducts, modelProducts } = useDeveloper();
   const [filter, setFilter] = useState("All");
   const [exported, setExported] = useState(false);
+  const commercialProducts = [...apiProducts, ...modelProducts];
 
   const totalGross = mockPayouts.reduce((s, p) => s + p.grossRevenue, 0);
   const totalCommission = mockPayouts.reduce((s, p) => s + p.commission, 0);
@@ -213,6 +217,44 @@ export default function EarningsPage() {
           </div>
         </div>
       </div>
+
+      <section className="overflow-x-auto rounded-xl border border-[#F1F5F9]/10 bg-[#1E293B]">
+        <div className="border-b border-[#F1F5F9]/10 p-4">
+          <h3 className="text-sm font-semibold text-[#F1F5F9]">Product Pricing &amp; Agreement</h3>
+          <p className="mt-1 text-xs text-[#CBD5E1]">Your current base prices, CODOS tiers, retail prices, and sign-off records.</p>
+        </div>
+        <table className="w-full min-w-[700px] text-xs">
+          <thead>
+            <tr className="border-b border-[#F1F5F9]/10">
+              {["Product", "Status", "Commercial terms"].map((label) => <th key={label} className="px-4 py-3 text-left font-medium text-[#CBD5E1]">{label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {commercialProducts.map((product) => (
+              <tr key={product.id} className="border-b border-[#F1F5F9]/5">
+                <td className="px-4 py-3 font-medium text-[#F1F5F9]">
+                  {product.productType === "api" ? product.payload.formA.productName : product.payload.formA.modelName}
+                </td>
+                <td className="px-4 py-3 text-[#CBD5E1]">{product.payload.status}</td>
+                <td className="px-4 py-3">
+                  <CommercialPricingDetails
+                    basePrice={product.basePrice}
+                    pricingTier={product.pricingTier}
+                    profitMarginPercent={product.profitMarginPercent}
+                    finalRetailPrice={product.finalRetailPrice}
+                    agreementSigned={product.agreementSigned}
+                    agreementSignedBy={product.agreementSignedBy}
+                    agreementSignedAt={product.agreementSignedAt}
+                  />
+                </td>
+              </tr>
+            ))}
+            {commercialProducts.length === 0 && (
+              <tr><td colSpan={3} className="px-4 py-8 text-center text-[#CBD5E1]">No product pricing records yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </section>
 
       {/* Payout History Table */}
       <div className="bg-[#1E293B] rounded-xl border border-[#F1F5F9]/10">

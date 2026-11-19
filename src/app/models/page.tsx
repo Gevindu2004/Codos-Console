@@ -36,7 +36,6 @@ export default function ModelHubPage() {
       if (provider !== "All" && model.providerType !== provider) return false;
       if (category !== "All" && model.category !== category) return false;
       if (inputType !== "All" && model.inputType !== inputType) return false;
-      if (pricing === "Free Tier" && !model.freeTierAllowance.trim()) return false;
       if (pricing === "Pay-as-you-go" && !["per_token", "per_inference", "per_image", "per_video_minute", "per_audio_minute", "credit_package"].includes(model.pricingModel)) return false;
       if (pricing === "Subscription" && model.pricingModel !== "subscription") return false;
       if (normalizedSearch) {

@@ -51,12 +51,11 @@ const sampleApi: ApiSubmissionPayload = {
   },
   formD: {
     authMethod: "api_key",
-    credentialsMasked: "API***********",
+    upstreamAuthHeader: "X-API-Key",
   },
   formE: {
     pricingModel: ["pay_per_request"],
     pricePerRequest: 0.001,
-    freeTrialAllowance: 1000,
     monthlyLimit: 100000,
     rpm: 100,
     maxConcurrency: 5,
@@ -98,7 +97,8 @@ const sampleModel: ModelSubmissionPayload = {
     fineTuned: true,
   },
   formB: {
-    hostingMethod: "developer_hosted",
+    authMethod: "api_key",
+    upstreamAuthHeader: "X-API-Key",
     inferenceEndpoint: "https://model.acme.com/v1/predict",
     hostingProvider: "GCP",
     healthCheckPath: "/health",

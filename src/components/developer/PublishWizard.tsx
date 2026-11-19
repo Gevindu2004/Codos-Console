@@ -2,9 +2,11 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useDeveloper } from "./DeveloperContext";
+import { developerApi } from "@/lib/developerApi";
+import { upsertMarketplaceProduct, type SharedProduct } from "@/lib/marketplaceStore";
+import { IntegrationPanel } from "./IntegrationPanel";
 import type {
   ApiSubmissionPayload,
-  HostingMethod,
   ModelSubmissionPayload,
   ProductType,
 } from "./types";
@@ -200,11 +202,10 @@ const initialApiPayload = (developerId: string): ApiSubmissionPayload => ({
     timeoutMs: undefined,
   },
   formC: { openApiSpec: "" },
-  formD: { authMethod: "", credentialsMasked: "" },
+  formD: { authMethod: "", upstreamAuthHeader: "X-API-Key" },
   formE: {
-    pricingModel: [],
+    pricingModel: ["pay_per_request"],
     pricePerRequest: undefined,
-    freeTrialAllowance: undefined,
     monthlyLimit: undefined,
     rpm: undefined,
     maxConcurrency: undefined,
@@ -236,21 +237,14 @@ const initialModelPayload = (developerId: string): ModelSubmissionPayload => ({
     fineTuned: false,
   },
   formB: {
-    hostingMethod: "",
+    authMethod: "none",
+    upstreamAuthHeader: "X-API-Key",
     inferenceEndpoint: "",
     hostingProvider: "",
     healthCheckPath: "",
     expectedLatencyMs: undefined,
     availabilityPct: undefined,
     maxRequestSizeMb: undefined,
-    dockerImageTag: "",
-    bundleArchiveUrl: "",
-    requiredRamGb: undefined,
-    requiredGpu: "",
-    runtimeVersion: "",
-    dependenciesFileUrl: "",
-    startupCommand: "",
-    entrypoint: "",
   },
   formC: {
     inputType: "",
@@ -283,7 +277,6 @@ const initialModelPayload = (developerId: string): ModelSubmissionPayload => ({
 
 type SavedPublishDraft = {
   productType: ProductType | null;
-  hostingMethod: HostingMethod | "";
   apiPayload: ApiSubmissionPayload;
   modelPayload: ModelSubmissionPayload;
 };
@@ -338,10 +331,10 @@ function schemaPreview(schema: string) {
 
 export const PublishWizard: React.FC = () => {
   const { profile, saveApiDraft, saveModelDraft } = useDeveloper();
+  const { submitMarketplaceApi, submitMarketplaceModel } = developerApi;
   const developerId = profile?.id ?? "";
   const linkedDeveloperId = profile && profile.status !== "unregistered" ? profile.id : "";
   const [productType, setProductType] = useState<ProductType | null>(null);
-  const [hostingMethod, setHostingMethod] = useState<HostingMethod | "">("");
   const [apiPayload, setApiPayload] = useState<ApiSubmissionPayload>(() =>
     initialApiPayload(linkedDeveloperId)
   );
@@ -351,7 +344,9 @@ export const PublishWizard: React.FC = () => {
   const [draftReady, setDraftReady] = useState(false);
   const [notice, setNotice] = useState("");
   const [validationReport, setValidationReport] = useState<string[] | null>(null);
-  const [credentialEntered, setCredentialEntered] = useState(false);
+  const [upstreamCredential, setUpstreamCredential] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [confirmationProduct, setConfirmationProduct] = useState<SharedProduct | null>(null);
   const [playgroundInput, setPlaygroundInput] = useState("");
   const [editorMode, setEditorMode] = useState<SubmissionMode | "create">("create");
   const [originalSubmission, setOriginalSubmission] = useState<OriginalSubmission | null>(null);
@@ -386,13 +381,11 @@ export const PublishWizard: React.FC = () => {
             const payload = cached.payload;
             setApiPayload(payload);
             setProductType("api");
-            setHostingMethod("developer_hosted");
             setOriginalSubmission({ type: "api", payload });
           } else if (cached.type === "model" && type === "model") {
             const payload = cached.payload;
             setModelPayload(payload);
             setProductType("model");
-            setHostingMethod(payload.formB.hostingMethod);
             setOriginalSubmission({ type: "model", payload });
           } else {
             setNotice("This submission link does not match the saved item. Return to the list and try again.");
@@ -431,7 +424,6 @@ export const PublishWizard: React.FC = () => {
     try {
       const draft: SavedPublishDraft = {
         productType,
-        hostingMethod,
         apiPayload,
         modelPayload,
       };
@@ -446,7 +438,7 @@ export const PublishWizard: React.FC = () => {
         );
       }
     }
-  }, [apiPayload, developerId, draftReady, editorMode, hostingMethod, modelPayload, productType]);
+  }, [apiPayload, developerId, draftReady, editorMode, modelPayload, productType]);
 
   const updateApiA = (patch: Partial<ApiSubmissionPayload["formA"]>) =>
     setApiPayload((current) => ({ ...current, formA: { ...current.formA, ...patch } }));
@@ -501,11 +493,16 @@ export const PublishWizard: React.FC = () => {
       if (!apiPayload.formA.category.trim()) issues.push("Choose an API category.");
       if (!apiPayload.formB.hostingProvider.trim()) issues.push("Add the API hosting provider.");
       if (!apiPayload.formB.baseUrl.startsWith("https://")) issues.push("The API base URL must use HTTPS.");
+      if (!apiPayload.formB.healthCheckPath?.trim()) issues.push("Add a health check path.");
       if (!apiPayload.formC.openApiSpec.trim()) issues.push("Add an OpenAPI / Swagger document.");
       else if (openApiPreview(apiPayload.formC.openApiSpec).startsWith("Could not")) {
         issues.push("The OpenAPI / Swagger document could not be parsed.");
       }
       if (!apiPayload.formD.authMethod) issues.push("Select an authentication method (choose None if the API is public).");
+      if (apiPayload.formD.authMethod !== "none" && !upstreamCredential.trim()) issues.push("Add the upstream authentication credential.");
+      if (!apiPayload.formE.pricingModel.some((pricingModel) => ["pay_per_request", "subscription"].includes(pricingModel))) {
+        issues.push("Select at least one paid pricing model.");
+      }
       if (!apiPayload.formF.ownershipConfirmed) issues.push("Confirm that you own or may distribute this API.");
       if (!apiPayload.formF.commissionAccepted) issues.push("Accept the CODOS commission terms.");
       return issues;
@@ -516,18 +513,22 @@ export const PublishWizard: React.FC = () => {
       if (!modelPayload.formA.version.trim()) issues.push("Add a model version.");
       if (!modelPayload.formA.shortDescription.trim()) issues.push("Add a short description.");
       if (!modelPayload.formA.detailedDescription.trim()) issues.push("Add a detailed description.");
-      if (!hostingMethod) issues.push("Select a model hosting method.");
-      if (hostingMethod === "developer_hosted" && !modelPayload.formB.inferenceEndpoint?.startsWith("https://")) {
-        issues.push("The developer-hosted inference endpoint must use HTTPS.");
-      }
-      if (hostingMethod === "codos_hosted" && !modelPayload.formB.dockerImageTag?.trim()) {
-        issues.push("Add a Docker image tag for CODOS hosting.");
-      }
+      if (!modelPayload.formB.inferenceEndpoint?.startsWith("https://")) issues.push("The developer-hosted inference endpoint must use HTTPS.");
+      if (!modelPayload.formB.healthCheckPath?.trim()) issues.push("Add a health check path.");
+      if (modelPayload.formB.authMethod !== "none" && !upstreamCredential.trim()) issues.push("Add the upstream authentication credential.");
       if (!modelPayload.formC.inputType) issues.push("Select a model input type.");
       if (!modelPayload.formC.outputType) issues.push("Select a model output type.");
       if (!modelPayload.formC.processingMode) issues.push("Select a processing mode.");
       if (!modelPayload.formC.deliveryMethod) issues.push("Select a result delivery method.");
-      if (!modelPayload.formE.billingUnit) issues.push("Select a model billable unit.");
+      if (![
+        "per_inference",
+        "per_image",
+        "per_video_min",
+        "per_audio_min",
+        "per_token",
+        "subscription",
+        "credit_package",
+      ].includes(modelPayload.formE.billingUnit)) issues.push("Select a paid model billable unit.");
       if (modelPayload.formC.schemaJson?.trim() && schemaPreview(modelPayload.formC.schemaJson).startsWith("Schema JSON is invalid")) {
         issues.push("Fix the input/output schema JSON.");
       }
@@ -536,7 +537,7 @@ export const PublishWizard: React.FC = () => {
       return issues;
     }
     return ["Select a product type to begin."];
-  }, [apiPayload, hostingMethod, modelPayload, productType]);
+  }, [apiPayload, modelPayload, productType, upstreamCredential]);
 
   const handleSaveDraft = () => {
     if (editorMode === "view") return;
@@ -547,7 +548,7 @@ export const PublishWizard: React.FC = () => {
     try {
       if (productType === "api") saveApiDraft(apiPayload);
       if (productType === "model") saveModelDraft(modelPayload);
-      const draft: SavedPublishDraft = { productType, hostingMethod, apiPayload, modelPayload };
+      const draft: SavedPublishDraft = { productType, apiPayload, modelPayload };
       localStorage.setItem(`codos-publish-draft-${developerId}`, JSON.stringify(draft));
       setNotice("Draft saved locally.");
     } catch {
@@ -555,26 +556,54 @@ export const PublishWizard: React.FC = () => {
     }
   };
 
-  const handleSubmit = () => {
-    if (editorMode === "view") return;
+  const handleSubmit = async () => {
+    if (editorMode === "view" || submitting) return;
     setValidationReport(report);
     if (report.length > 0) {
       setNotice("Complete the items in the Pre-Submission Review Report before submitting.");
       return;
     }
+    if (!linkedDeveloperId) {
+      setNotice("Register a developer profile before submitting a product.");
+      return;
+    }
+    setSubmitting(true);
     try {
       if (productType === "api") {
         const submitted = { ...apiPayload, status: "Submitted" as const };
+        const savedProduct = await submitMarketplaceApi(submitted, upstreamCredential);
         setApiPayload(submitted);
         saveApiDraft(submitted);
+        const sharedProduct = upsertMarketplaceProduct(
+          submitted,
+          profile?.developerName || linkedDeveloperId,
+          savedProduct?.id,
+          savedProduct,
+        );
+        setConfirmationProduct(sharedProduct);
+        setNotice(savedProduct
+          ? "Submission saved to the marketplace for review."
+          : "The backend is offline. Your submission is saved locally and can be retried when it is available.");
       } else if (productType === "model") {
         const submitted = { ...modelPayload, status: "Submitted" as const };
+        const savedProduct = await submitMarketplaceModel(submitted, upstreamCredential);
         setModelPayload(submitted);
         saveModelDraft(submitted);
+        const sharedProduct = upsertMarketplaceProduct(
+          submitted,
+          profile?.developerName || linkedDeveloperId,
+          savedProduct?.id,
+          savedProduct,
+        );
+        setConfirmationProduct(sharedProduct);
+        setNotice(savedProduct
+          ? "Submission saved to the marketplace for review."
+          : "The backend is offline. Your submission is saved locally and can be retried when it is available.");
       }
-      setNotice("Submission saved for review. Backend review integration is pending.");
-    } catch {
-      setNotice("Submission could not be saved. Please try again.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Submission could not be saved. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -592,6 +621,7 @@ export const PublishWizard: React.FC = () => {
     setApiPayload((current) => ({ ...current, formC: { openApiSpec } }));
 
   const handleReset = () => {
+    setConfirmationProduct(null);
     let cleanupFailed = false;
     const params = new URLSearchParams(window.location.search);
     const submissionId = params.get("draftId") ?? params.get("editId");
@@ -612,12 +642,11 @@ export const PublishWizard: React.FC = () => {
     setApiPayload(initialApiPayload(linkedDeveloperId));
     setModelPayload(initialModelPayload(linkedDeveloperId));
     setProductType(null);
-    setHostingMethod("");
     setDraftReady(true);
     setEditorMode("create");
     setOriginalSubmission(null);
     setValidationReport(null);
-    setCredentialEntered(false);
+    setUpstreamCredential("");
     setPlaygroundInput("");
     autoSaveErrorShown.current = false;
     setNotice(
@@ -678,66 +707,31 @@ export const PublishWizard: React.FC = () => {
         }`}
       >
       <section className="rounded-xl border border-[#14B8A6]/25 bg-[#1E293B] p-5">
-        <div className="grid gap-5 md:grid-cols-2">
-          <div>
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#CBD5E1]/70">
-              Product type
-            </h2>
-            <div className="flex flex-wrap gap-2">
-              {(["api", "model"] as const).map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  disabled={editorMode === "edit" || editorMode === "fix"}
-                  onClick={() => {
-                    setProductType(type);
-                    setValidationReport(null);
-                  }}
-                  className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-                    productType === type
-                      ? "bg-[#14B8A6] text-[#0F172A]"
-                      : "bg-[#0F172A] text-[#CBD5E1] hover:text-white"
-                  } disabled:cursor-not-allowed disabled:opacity-60`}
-                >
-                  {type === "api" ? "API" : "AI Model"}
-                </button>
-              ))}
-            </div>
-          </div>
-          {productType === "model" ? (
-            <div>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#CBD5E1]/70">
-                Hosting method
-              </h2>
-              <div className="flex flex-wrap gap-2">
-                {([
-                  ["developer_hosted", "Developer-Hosted"],
-                  ["codos_hosted", "CODOS-Hosted"],
-                ] as const).map(([method, label]) => (
-                  <button
-                    key={method}
-                    type="button"
-                    onClick={() => {
-                      setHostingMethod(method);
-                      updateModelB({ hostingMethod: method });
-                    }}
-                    className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-                      hostingMethod === method
-                        ? "bg-[#14B8A6] text-[#0F172A]"
-                        : "bg-[#0F172A] text-[#CBD5E1] hover:text-white"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="self-end text-xs text-[#CBD5E1]/70">
-              API hosting uses your developer-managed HTTPS endpoint.
-            </div>
-          )}
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#CBD5E1]/70">Product type</h2>
+        <div className="flex flex-wrap gap-2">
+          {(["api", "model"] as const).map((type) => (
+            <button
+              key={type}
+              type="button"
+              disabled={editorMode === "edit" || editorMode === "fix"}
+              onClick={() => {
+                setProductType(type);
+                setValidationReport(null);
+                setUpstreamCredential("");
+              }}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                productType === type
+                  ? "bg-[#14B8A6] text-[#0F172A]"
+                  : "bg-[#0F172A] text-[#CBD5E1] hover:text-white"
+              } disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              {type === "api" ? "API" : "AI Model"}
+            </button>
+          ))}
         </div>
+        <p className="mt-4 inline-flex rounded-full border border-[#14B8A6]/25 bg-[#14B8A6]/10 px-3 py-2 text-xs text-[#CBD5E1]">
+          All third-party APIs and AI Models connect via your HTTPS endpoint through the CODOS API Gateway.
+        </p>
       </section>
 
       <nav
@@ -805,26 +799,30 @@ export const PublishWizard: React.FC = () => {
           </FormCard>
 
           <FormCard id="section-d" title="Form D — Authentication & Credentials" description="Configure the API authentication contract. Secrets are never included in the saved draft." highlighted={editorMode === "fix"}>
-            <SelectField label="Authentication method" value={apiPayload.formD.authMethod} onChange={(value) => updateApiD({ authMethod: value as ApiSubmissionPayload["formD"]["authMethod"] })}>
+            <SelectField label="Authentication method" value={apiPayload.formD.authMethod} onChange={(value) => {
+              const authMethod = value as ApiSubmissionPayload["formD"]["authMethod"];
+              updateApiD({
+                authMethod,
+                upstreamAuthHeader: authMethod === "none" ? undefined : ["bearer", "basic", "oauth2"].includes(authMethod) ? "Authorization" : "X-API-Key",
+              });
+              if (authMethod === "none") setUpstreamCredential("");
+            }}>
               <option className={optionClass} value="">Select authentication method...</option><option className={optionClass} value="none">None</option><option className={optionClass} value="api_key">API key</option><option className={optionClass} value="bearer">Bearer token</option><option className={optionClass} value="basic">Basic authentication</option><option className={optionClass} value="oauth2">OAuth 2.0</option>
             </SelectField>
-            {apiPayload.formD.authMethod !== "" && apiPayload.formD.authMethod !== "none" && (
+            {apiPayload.formD.authMethod !== "" && apiPayload.formD.authMethod !== "none" && <>
+              <TextField label="Upstream authentication header" value={apiPayload.formD.upstreamAuthHeader ?? ""} onChange={(value) => updateApiD({ upstreamAuthHeader: value })} placeholder={apiPayload.formD.authMethod === "bearer" ? "Authorization" : "X-API-Key"} required />
               <label className="block space-y-1.5 text-xs text-[#CBD5E1]">
-                <span>Test credential (masked; not saved or submitted)</span>
-                <input type="password" autoComplete="new-password" onChange={(event) => {
-                  setCredentialEntered(Boolean(event.target.value));
-                  updateApiD({ credentialsMasked: event.target.value ? "••••••••" : "" });
-                }} placeholder="Enter a temporary test credential" className={fieldClass} />
-                <span className="block text-[11px] text-[#CBD5E1]/60">{credentialEntered ? "Credential entered and masked in the review payload." : "Use a temporary credential only; raw values remain in this field and are not persisted."}</span>
+                <span>Upstream credential</span>
+                <input type="password" autoComplete="new-password" value={upstreamCredential} onChange={(event) => setUpstreamCredential(event.target.value)} placeholder="Stored encrypted on the server" className={fieldClass} required />
+                <span className="block text-[11px] text-[#CBD5E1]/60">Sent directly to the backend once and never included in the saved draft.</span>
               </label>
-            )}
+            </>}
           </FormCard>
 
           <FormCard id="section-e" title="Form E — Pricing & Rate Limits" description="Select pricing plans and set optional usage caps." highlighted={editorMode === "fix"}>
             <div className="space-y-3">
               <p className="text-xs text-[#CBD5E1]">Pricing models</p>
               {[
-                ["free", "Free tier"],
                 ["pay_per_request", "Pay per request"],
                 ["subscription", "Subscription"],
               ].map(([value, label]) => (
@@ -832,7 +830,6 @@ export const PublishWizard: React.FC = () => {
               ))}
             </div>
             <TextField label="Price per request (USD)" value={numberValue(apiPayload.formE.pricePerRequest)} onChange={(value) => updateApiE({ pricePerRequest: value ? Number(value) : undefined })} type="number" min="0" step="0.000001" placeholder="e.g., 0.001" />
-            <TextField label="Free trial allowance (requests)" value={numberValue(apiPayload.formE.freeTrialAllowance)} onChange={(value) => updateApiE({ freeTrialAllowance: value ? Number(value) : undefined })} type="number" min="0" placeholder="e.g., 100" />
             <TextField label="Monthly request limit" value={numberValue(apiPayload.formE.monthlyLimit)} onChange={(value) => updateApiE({ monthlyLimit: value ? Number(value) : undefined })} type="number" min="0" placeholder="e.g., 10000" />
             <TextField label="Rate limit (requests / minute)" value={numberValue(apiPayload.formE.rpm)} onChange={(value) => updateApiE({ rpm: value ? Number(value) : undefined })} type="number" min="0" placeholder="e.g., 1000" />
             <TextField label="Maximum concurrency" value={numberValue(apiPayload.formE.maxConcurrency)} onChange={(value) => updateApiE({ maxConcurrency: value ? Number(value) : undefined })} type="number" min="0" placeholder="e.g., 10" />
@@ -872,30 +869,31 @@ export const PublishWizard: React.FC = () => {
             </div>
           </FormCard>
 
-          <FormCard id="section-b" title="Form B — Hosting & Deployment" description="Provide the endpoint details or the CODOS-hosted model bundle requirements." highlighted={editorMode === "fix"}>
-            {hostingMethod === "developer_hosted" ? (
-              <>
-                <TextField label="Inference endpoint (HTTPS)" value={modelPayload.formB.inferenceEndpoint ?? ""} onChange={(value) => updateModelB({ inferenceEndpoint: value })} type="url" placeholder="https://yourdomain.com/v1/infer" required />
-                <TextField label="Hosting provider" value={modelPayload.formB.hostingProvider ?? ""} onChange={(value) => updateModelB({ hostingProvider: value })} placeholder="e.g., Azure, AWS, GCP" />
-                <TextField label="Health check path" value={modelPayload.formB.healthCheckPath ?? ""} onChange={(value) => updateModelB({ healthCheckPath: value })} placeholder="e.g., /health" />
-                <TextField label="Expected latency (ms)" value={numberValue(modelPayload.formB.expectedLatencyMs)} onChange={(value) => updateModelB({ expectedLatencyMs: value ? Number(value) : undefined })} type="number" min="0" placeholder="e.g., 250" />
-                <TextField label="Availability (%)" value={numberValue(modelPayload.formB.availabilityPct)} onChange={(value) => updateModelB({ availabilityPct: value ? Number(value) : undefined })} type="number" min="0" max="100" step="0.01" placeholder="e.g., 99.9" />
-                <TextField label="Maximum request size (MB)" value={numberValue(modelPayload.formB.maxRequestSizeMb)} onChange={(value) => updateModelB({ maxRequestSizeMb: value ? Number(value) : undefined })} type="number" min="0" placeholder="e.g., 10" />
-              </>
-            ) : hostingMethod === "codos_hosted" ? (
-              <>
-                <TextField label="Docker image tag" value={modelPayload.formB.dockerImageTag ?? ""} onChange={(value) => updateModelB({ dockerImageTag: value })} placeholder="e.g., registry.example.com/model:1.0.0" required />
-                <TextField label="Bundle archive URL" value={modelPayload.formB.bundleArchiveUrl ?? ""} onChange={(value) => updateModelB({ bundleArchiveUrl: value })} type="url" placeholder="https://yourdomain.com/model-bundle.tar.gz" />
-                <TextField label="Required RAM (GB)" value={numberValue(modelPayload.formB.requiredRamGb)} onChange={(value) => updateModelB({ requiredRamGb: value ? Number(value) : undefined })} type="number" min="0" placeholder="e.g., 16" />
-                <TextField label="Required GPU" value={modelPayload.formB.requiredGpu ?? ""} onChange={(value) => updateModelB({ requiredGpu: value })} placeholder="e.g., NVIDIA L4" />
-                <TextField label="Runtime version" value={modelPayload.formB.runtimeVersion ?? ""} onChange={(value) => updateModelB({ runtimeVersion: value })} placeholder="e.g., Python 3.12" />
-                <TextField label="Dependencies file URL" value={modelPayload.formB.dependenciesFileUrl ?? ""} onChange={(value) => updateModelB({ dependenciesFileUrl: value })} type="url" placeholder="https://yourdomain.com/requirements.txt" />
-                <TextField label="Startup command" value={modelPayload.formB.startupCommand ?? ""} onChange={(value) => updateModelB({ startupCommand: value })} placeholder="e.g., python serve.py" />
-                <TextField label="Entrypoint" value={modelPayload.formB.entrypoint ?? ""} onChange={(value) => updateModelB({ entrypoint: value })} placeholder="e.g., app:predict" />
-              </>
-            ) : (
-              <p className="text-xs text-[#CBD5E1]/70">Choose a hosting method above to configure deployment details.</p>
-            )}
+          <FormCard id="section-b" title="Form B — Developer-Hosted HTTPS Endpoint" description="All third-party models are served from your HTTPS inference endpoint and routed through the CODOS API Gateway." highlighted={editorMode === "fix"}>
+            <TextField label="Inference endpoint (HTTPS)" value={modelPayload.formB.inferenceEndpoint ?? ""} onChange={(value) => updateModelB({ inferenceEndpoint: value })} type="url" placeholder="https://yourdomain.com/v1/infer" required />
+            <TextField label="Hosting provider" value={modelPayload.formB.hostingProvider ?? ""} onChange={(value) => updateModelB({ hostingProvider: value })} placeholder="e.g., Azure, AWS, GCP" />
+            <TextField label="Health check path" value={modelPayload.formB.healthCheckPath ?? ""} onChange={(value) => updateModelB({ healthCheckPath: value })} placeholder="e.g., /health" required />
+            <TextField label="Expected latency (ms)" value={numberValue(modelPayload.formB.expectedLatencyMs)} onChange={(value) => updateModelB({ expectedLatencyMs: value ? Number(value) : undefined })} type="number" min="0" placeholder="e.g., 250" />
+            <TextField label="Availability (%)" value={numberValue(modelPayload.formB.availabilityPct)} onChange={(value) => updateModelB({ availabilityPct: value ? Number(value) : undefined })} type="number" min="0" max="100" step="0.01" placeholder="e.g., 99.9" />
+            <TextField label="Maximum request size (MB)" value={numberValue(modelPayload.formB.maxRequestSizeMb)} onChange={(value) => updateModelB({ maxRequestSizeMb: value ? Number(value) : undefined })} type="number" min="0" placeholder="e.g., 10" />
+            <SelectField label="Upstream authentication method" value={modelPayload.formB.authMethod} onChange={(value) => {
+              const authMethod = value as ModelSubmissionPayload["formB"]["authMethod"];
+              updateModelB({
+                authMethod,
+                upstreamAuthHeader: authMethod === "none" ? undefined : ["bearer", "basic", "oauth2"].includes(authMethod) ? "Authorization" : "X-API-Key",
+              });
+              if (authMethod === "none") setUpstreamCredential("");
+            }}>
+              <option className={optionClass} value="none">None</option><option className={optionClass} value="api_key">API key</option><option className={optionClass} value="bearer">Bearer token</option><option className={optionClass} value="basic">Basic authentication</option><option className={optionClass} value="oauth2">OAuth 2.0</option>
+            </SelectField>
+            {modelPayload.formB.authMethod !== "none" && <>
+              <TextField label="Upstream authentication header" value={modelPayload.formB.upstreamAuthHeader ?? ""} onChange={(value) => updateModelB({ upstreamAuthHeader: value })} placeholder={modelPayload.formB.authMethod === "bearer" ? "Authorization" : "X-API-Key"} required />
+              <label className="block space-y-1.5 text-xs text-[#CBD5E1]">
+                <span>Upstream credential</span>
+                <input type="password" autoComplete="new-password" value={upstreamCredential} onChange={(event) => setUpstreamCredential(event.target.value)} placeholder="Stored encrypted on the server" className={fieldClass} required />
+                <span className="block text-[11px] text-[#CBD5E1]/60">Sent directly to the backend once and never included in the saved draft.</span>
+              </label>
+            </>}
           </FormCard>
 
           <FormCard id="section-c" title="Form C — Input / Output Schema & Playground" description="Define supported formats and preview JSON schema and sample input." highlighted={editorMode === "fix"}>
@@ -951,7 +949,7 @@ export const PublishWizard: React.FC = () => {
           <FormCard id="section-e" title="Form E — Model Pricing & Billable Unit" description="Choose the unit used to meter model usage and set rate and limits." highlighted={editorMode === "fix"}>
             <SelectField label="Billable unit" value={modelPayload.formE.billingUnit} onChange={(value) => updateModelE({ billingUnit: value as ModelSubmissionPayload["formE"]["billingUnit"] })}>
               <option className={optionClass} value="">Select a billable unit...</option>
-              <option className={optionClass} value="free">Free</option><option className={optionClass} value="per_inference">Per inference</option><option className={optionClass} value="per_image">Per image</option><option className={optionClass} value="per_video_min">Per video minute</option><option className={optionClass} value="per_audio_min">Per audio minute</option><option className={optionClass} value="per_token">Per token</option><option className={optionClass} value="subscription">Subscription</option><option className={optionClass} value="credit_package">Credit package</option>
+              <option className={optionClass} value="per_inference">Per inference</option><option className={optionClass} value="per_image">Per image</option><option className={optionClass} value="per_video_min">Per video minute</option><option className={optionClass} value="per_audio_min">Per audio minute</option><option className={optionClass} value="per_token">Per token</option><option className={optionClass} value="subscription">Subscription</option><option className={optionClass} value="credit_package">Credit package</option>
             </SelectField>
             <TextField label="Rate (USD per billable unit)" value={numberValue(modelPayload.formE.rate)} onChange={(value) => updateModelE({ rate: value ? Number(value) : undefined })} type="number" min="0" step="0.000001" placeholder="e.g., 0.001" />
             <div className="sm:col-span-2">
@@ -1007,13 +1005,24 @@ export const PublishWizard: React.FC = () => {
               <button type="button" onClick={handleSaveDraft} className="rounded-lg border border-[#F1F5F9]/15 px-3 py-2 text-xs font-semibold text-[#CBD5E1] hover:bg-[#F1F5F9]/5">
                 Save Draft
               </button>
-              <button type="button" onClick={handleSubmit} disabled={!productType} className="rounded-lg bg-[#14B8A6] px-3 py-2 text-xs font-semibold text-[#0F172A] disabled:cursor-not-allowed disabled:opacity-50">
-                Submit for Review
+              <button type="button" onClick={handleSubmit} disabled={!productType || submitting} className="rounded-lg bg-[#14B8A6] px-3 py-2 text-xs font-semibold text-[#0F172A] disabled:cursor-not-allowed disabled:opacity-50">
+                {submitting ? "Submitting..." : "Submit for Review"}
               </button>
             </div>
           </>
         )}
       </div>
+      {confirmationProduct && (
+        <IntegrationPanel
+          product={confirmationProduct}
+          confirmation
+          onClose={() => setConfirmationProduct(null)}
+          onSubmitAnother={() => {
+            setConfirmationProduct(null);
+            handleReset();
+          }}
+        />
+      )}
     </div>
   );
 };

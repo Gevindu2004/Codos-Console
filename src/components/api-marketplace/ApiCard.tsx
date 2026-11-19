@@ -7,7 +7,6 @@ import type { MarketplaceApi } from "./types";
 export default function ApiCard({ api }: { api: MarketplaceApi }) {
   const Icon = api.category === "Voice & Communications" ? PhoneCall : api.category === "AI & NLP" ? Bot : api.category === "Developer Tools" ? Code2 : Headphones;
   const startingPlan = api.pricingPlans.find((plan) => plan.id === "pay-per-request");
-  const hasFreeTier = api.pricingPlans.some((plan) => plan.id === "free" && plan.monthlyRequestLimit);
   return (
     <article className="glass-panel rounded-2xl p-5 flex flex-col min-h-[310px] hover:border-[#14B8A6]/45 transition-colors">
       <div className="flex items-start justify-between gap-3">
@@ -25,7 +24,6 @@ export default function ApiCard({ api }: { api: MarketplaceApi }) {
       <p className="mt-1 text-xs text-[#CBD5E1] leading-relaxed line-clamp-2">{api.tagline}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <span className="text-[10px] px-2 py-1 rounded-md bg-[#F1F5F9]/6 text-[#CBD5E1]">{api.category}</span>
-        {hasFreeTier && <span className="text-[10px] px-2 py-1 rounded-md bg-[#14B8A6]/12 text-[#14B8A6]">Free tier</span>}
       </div>
       <div className="mt-4 text-[10px] font-mono text-[#CBD5E1] truncate" title={api.baseUrl}>{api.baseUrl}</div>
       <div className="mt-auto pt-4">

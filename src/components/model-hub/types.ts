@@ -12,7 +12,6 @@ export type ModelCategory =
   | "Industry-specific AI";
 
 export type PricingModel =
-  | "free"
   | "per_token"
   | "per_inference"
   | "per_image"
@@ -55,7 +54,6 @@ export interface MarketplaceModel {
   pricingModel: PricingModel;
   priceDisplay: string;
   unitLabel: string;
-  freeTierAllowance: string;
   avgLatencyMs: number;
   status: ModelStatus;
   inputType: InputType;

@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     # Encryption key for storing user external DB connection strings (32 url-safe base64 bytes)
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     DB_CREDENTIAL_ENCRYPTION_KEY: str
+    MARKETPLACE_ADMIN_TOKEN: Optional[str] = None
+    MARKETPLACE_GATEWAY_BASE_URL: str = "http://localhost:8000/api/v1/gateway"
 
     # Model Serving Mode:
     # "local_gpu" -> loads Qwen2.5-7B / Llama-3-8B + PEFT LoRA adapters directly on local CUDA GPU

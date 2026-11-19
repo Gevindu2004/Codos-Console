@@ -26,7 +26,6 @@ export default function DeveloperAndPricingCard({ model }: { model: MarketplaceM
         <p className="text-[10px] uppercase tracking-wider text-[#CBD5E1]/70">Pricing</p>
         <p className="mt-2 text-lg font-bold text-[#14B8A6]">{model.priceDisplay}</p>
         <p className="text-[10px] text-[#CBD5E1]">{model.unitLabel}</p>
-        <p className="mt-2 text-xs text-[#CBD5E1]">Free allowance: {model.freeTierAllowance}</p>
       </div>
       <a href={`mailto:${model.supportContact}`} className="flex items-center gap-2 text-xs text-[#CBD5E1] hover:text-[#14B8A6]">
         <Headphones className="w-4 h-4" />{model.supportContact}

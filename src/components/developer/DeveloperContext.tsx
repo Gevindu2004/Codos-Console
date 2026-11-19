@@ -1,24 +1,30 @@
-// src/components/developer/DeveloperContext.tsx
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { developerApi } from "../../lib/developerApi";
 import type {
-  DeveloperProfile,
   ApiSubmissionPayload,
-  ModelSubmissionPayload,
   DeveloperNotification,
+  DeveloperProfile,
   EarningsRecord,
-  SubmissionStatus,
+  ModelSubmissionPayload,
 } from "./types";
+import {
+  getCurrentDeveloperId,
+  getDeveloperProfile,
+  getDeveloperProducts,
+  subscribeMarketplaceStore,
+  subscribeToCurrentDeveloper,
+  type SharedProduct,
+} from "@/lib/marketplaceStore";
 
 interface DeveloperContextState {
   profile: DeveloperProfile | null;
   apiSubmissions: ApiSubmissionPayload[];
   modelSubmissions: ModelSubmissionPayload[];
+  apiProducts: Array<SharedProduct & { productType: "api"; payload: ApiSubmissionPayload }>;
+  modelProducts: Array<SharedProduct & { productType: "model"; payload: ModelSubmissionPayload }>;
   notifications: DeveloperNotification[];
   earnings: EarningsRecord[];
-  // Draft persistence helpers
   getApiDraft: (id: string) => ApiSubmissionPayload | null;
   saveApiDraft: (payload: ApiSubmissionPayload) => void;
   getModelDraft: (id: string) => ModelSubmissionPayload | null;
@@ -27,81 +33,68 @@ interface DeveloperContextState {
 
 const DeveloperContext = createContext<DeveloperContextState | undefined>(undefined);
 
+function isApiProduct(
+  product: SharedProduct,
+): product is SharedProduct & { productType: "api"; payload: ApiSubmissionPayload } {
+  return product.productType === "api";
+}
+
+function isModelProduct(
+  product: SharedProduct,
+): product is SharedProduct & { productType: "model"; payload: ModelSubmissionPayload } {
+  return product.productType === "model";
+}
+function readDraft<T>(key: string, id: string): T | null {
+  const stored = window.localStorage.getItem(key);
+  if (!stored) return null;
+  const drafts = JSON.parse(stored) as Record<string, T>;
+  return drafts[id] ?? null;
+}
+
+function saveDraft<T>(key: string, id: string, payload: T): void {
+  const stored = window.localStorage.getItem(key);
+  const drafts = stored ? JSON.parse(stored) as Record<string, T> : {};
+  drafts[id] = payload;
+  window.localStorage.setItem(key, JSON.stringify(drafts));
+}
+
 export const DeveloperProvider: React.FC<{ devId: string; children: React.ReactNode }> = ({ devId, children }) => {
   const [profile, setProfile] = useState<DeveloperProfile | null>(null);
-  const [apiSubmissions, setApiSubmissions] = useState<ApiSubmissionPayload[]>([]);
-  const [modelSubmissions, setModelSubmissions] = useState<ModelSubmissionPayload[]>([]);
-  const [notifications, setNotifications] = useState<DeveloperNotification[]>([]);
-  const [earnings, setEarnings] = useState<EarningsRecord[]>([]);
+  const [apiProducts, setApiProducts] = useState<DeveloperContextState["apiProducts"]>([]);
+  const [modelProducts, setModelProducts] = useState<DeveloperContextState["modelProducts"]>([]);
 
-  // Load profile & submissions on mount
   useEffect(() => {
-    developerApi.getProfile(devId).then(setProfile).catch(console.error);
-    developerApi.listApis(devId).then(setApiSubmissions).catch(console.error);
-    developerApi.listModels(devId).then(setModelSubmissions).catch(console.error);
-    // Mock notifications & earnings – in real app they'd be fetched from API
-    setNotifications([
-      { id: "n1", message: "Your API 'Acme Weather' passed validation.", createdAt: now(), read: false },
-    ]);
-    setEarnings([
-      { productId: "api-1", amountUsd: 125.0, earnedAt: now() },
-    ]);
+    const refresh = () => {
+      const activeId = getCurrentDeveloperId(devId);
+      setProfile(getDeveloperProfile(activeId));
+      const products = getDeveloperProducts(activeId);
+      setApiProducts(products.filter(isApiProduct));
+      setModelProducts(products.filter(isModelProduct));
+    };
+    refresh();
+    const unsubscribeStore = subscribeMarketplaceStore(refresh);
+    const unsubscribeDeveloper = subscribeToCurrentDeveloper(refresh);
+    return () => {
+      unsubscribeStore();
+      unsubscribeDeveloper();
+    };
   }, [devId]);
 
-  const now = () => new Date().toISOString();
-
-  // Draft persistence – stored under localStorage key `${devId}-api-drafts` / `${devId}-model-drafts`
-  const getApiDraft = (id: string): ApiSubmissionPayload | null => {
-    const stored = localStorage.getItem(`${devId}-api-drafts`);
-    if (!stored) return null;
-    const drafts: Record<string, ApiSubmissionPayload> = JSON.parse(stored);
-    return drafts[id] ?? null;
-  };
-  const saveApiDraft = (payload: ApiSubmissionPayload) => {
-    const stored = localStorage.getItem(`${devId}-api-drafts`);
-    const drafts: Record<string, ApiSubmissionPayload> = stored ? JSON.parse(stored) : {};
-    drafts[payload.formA.developerId] = payload; // using developerId as key (could be draftId in real impl)
-    localStorage.setItem(`${devId}-api-drafts`, JSON.stringify(drafts));
-    // Update in‑memory list for UI refresh
-    setApiSubmissions((prev) => {
-      const idx = prev.findIndex((p) => p.formA.developerId === payload.formA.developerId);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = payload;
-        return copy;
-      }
-      return [...prev, payload];
-    });
-  };
-
-  const getModelDraft = (id: string): ModelSubmissionPayload | null => {
-    const stored = localStorage.getItem(`${devId}-model-drafts`);
-    if (!stored) return null;
-    const drafts: Record<string, ModelSubmissionPayload> = JSON.parse(stored);
-    return drafts[id] ?? null;
-  };
-  const saveModelDraft = (payload: ModelSubmissionPayload) => {
-    const stored = localStorage.getItem(`${devId}-model-drafts`);
-    const drafts: Record<string, ModelSubmissionPayload> = stored ? JSON.parse(stored) : {};
-    drafts[payload.formA.developerId] = payload;
-    localStorage.setItem(`${devId}-model-drafts`, JSON.stringify(drafts));
-    setModelSubmissions((prev) => {
-      const idx = prev.findIndex((p) => p.formA.developerId === payload.formA.developerId);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = payload;
-        return copy;
-      }
-      return [...prev, payload];
-    });
-  };
+  const getApiDraft = (id: string) => readDraft<ApiSubmissionPayload>(`${devId}-api-drafts`, id);
+  const saveApiDraft = (payload: ApiSubmissionPayload) =>
+    saveDraft(`${devId}-api-drafts`, payload.formA.developerId, payload);
+  const getModelDraft = (id: string) => readDraft<ModelSubmissionPayload>(`${devId}-model-drafts`, id);
+  const saveModelDraft = (payload: ModelSubmissionPayload) =>
+    saveDraft(`${devId}-model-drafts`, payload.formA.developerId, payload);
 
   const value: DeveloperContextState = {
     profile,
-    apiSubmissions,
-    modelSubmissions,
-    notifications,
-    earnings,
+    apiProducts,
+    modelProducts,
+    apiSubmissions: apiProducts.map((product) => product.payload),
+    modelSubmissions: modelProducts.map((product) => product.payload),
+    notifications: [],
+    earnings: [],
     getApiDraft,
     saveApiDraft,
     getModelDraft,

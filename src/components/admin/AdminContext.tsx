@@ -12,10 +12,20 @@ import {
 } from "react";
 import {
   createSeededAdminState,
-  emptyChecks,
   loadAdminState,
   saveAdminState,
 } from "@/lib/adminApi";
+import {
+  readMarketplaceStore,
+  sharedProductsToAdmin,
+  syncMarketplaceDevelopersFromBackend,
+  subscribeMarketplaceStore,
+  syncMarketplaceProductsFromBackend,
+  updateDeveloperReview,
+  updateProductChecks,
+  updateProductFeatured,
+  updateProductReview,
+} from "@/lib/marketplaceStore";
 import type {
   AdminState,
   AutomatedCheckKey,
@@ -70,50 +80,77 @@ function statusOf(item: AdminState["submissions"][number]) {
   return item.payload.status;
 }
 
-function withSubmissionStatus(
-  item: AdminState["submissions"][number],
-  status: AdminState["submissions"][number]["payload"]["status"],
-): AdminState["submissions"][number] {
-  if (item.productType === "api") {
-    return { ...item, payload: { ...item.payload, status } };
-  }
-  return { ...item, payload: { ...item.payload, status } };
-}
-
 export function AdminProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AdminState>(() => createSeededAdminState());
+  const [state, setState] = useState<AdminState>(() => {
+    const seed = createSeededAdminState();
+    return {
+      ...seed,
+      developers: [],
+      submissions: [],
+      liveProducts: seed.liveProducts.filter((product) => product.providerType === "via_codos"),
+    };
+  });
   const stateRef = useRef(state);
 
   useEffect(() => {
+    const applySharedData = () => {
+      const current = stateRef.current;
+      const shared = readMarketplaceStore();
+      const { submissions, liveProducts } = sharedProductsToAdmin(
+        shared.products,
+        current.liveProducts.filter((product) => product.providerType === "via_codos"),
+      );
+      const next = { ...current, developers: shared.developers, submissions, liveProducts };
+      stateRef.current = next;
+      setState(next);
+    };
     try {
       const saved = loadAdminState();
       if (saved) {
-        const frame = window.requestAnimationFrame(() => {
-          stateRef.current = saved;
-          setState(saved);
-        });
-        return () => window.cancelAnimationFrame(frame);
+        const seed = createSeededAdminState();
+        const next = {
+          ...seed,
+          ...saved,
+          developers: [],
+          submissions: [],
+          liveProducts: (saved.liveProducts ?? seed.liveProducts).filter((product) => product.providerType === "via_codos"),
+        };
+        stateRef.current = next;
+        setState(next);
       }
     } catch (error) {
       console.error("Could not load persisted admin portal state.", error);
     }
+    applySharedData();
+    const unsubscribe = subscribeMarketplaceStore(applySharedData);
+    void syncMarketplaceDevelopersFromBackend().then(syncMarketplaceProductsFromBackend);
+    return unsubscribe;
   }, []);
 
   const commit = useCallback((next: AdminState) => {
-    saveAdminState(next);
-    stateRef.current = next;
-    setState(next);
+    const shared = readMarketplaceStore();
+    const { submissions, liveProducts } = sharedProductsToAdmin(
+      shared.products,
+      next.liveProducts.filter((product) => product.providerType === "via_codos"),
+    );
+    const updated = { ...next, developers: shared.developers, submissions, liveProducts };
+    saveAdminState({
+      ...updated,
+      developers: [],
+      submissions: [],
+      liveProducts: updated.liveProducts.filter((product) => product.providerType === "via_codos"),
+    });
+    stateRef.current = updated;
+    setState(updated);
   }, []);
 
   const approveDeveloper = useCallback((id: string) => {
     const current = stateRef.current;
-    const application = current.developers.find((entry) => entry.id === id);
+    const application = readMarketplaceStore().developers.find((entry) => entry.id === id);
     if (!application) throw new Error(`Developer application ${id} was not found.`);
+    updateDeveloperReview(id, "approved", "Approved by platform administration.");
     const next = {
       ...current,
-      developers: current.developers.map((entry) =>
-        entry.id === id ? { ...entry, status: "approved" as const, reviewNotes: "Approved by platform administration." } : entry,
-      ),
       auditEvents: [
         makeEvent("Developer", id, "Developer approved", application.developerName, "pending → approved"),
         ...current.auditEvents,
@@ -125,13 +162,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const rejectDeveloper = useCallback((id: string, reason: string) => {
     if (!reason.trim()) throw new Error("A rejection reason is required.");
     const current = stateRef.current;
-    const application = current.developers.find((entry) => entry.id === id);
+    const application = readMarketplaceStore().developers.find((entry) => entry.id === id);
     if (!application) throw new Error(`Developer application ${id} was not found.`);
+    updateDeveloperReview(id, "rejected", reason.trim());
     commit({
       ...current,
-      developers: current.developers.map((entry) =>
-        entry.id === id ? { ...entry, status: "rejected" as const, reviewNotes: reason.trim() } : entry,
-      ),
       auditEvents: [
         makeEvent("Developer", id, "Developer rejected", reason.trim(), `${application.status} → rejected`),
         ...current.auditEvents,
@@ -142,13 +177,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const suspendDeveloper = useCallback((id: string, reason: string) => {
     if (!reason.trim()) throw new Error("A suspension reason is required.");
     const current = stateRef.current;
-    const application = current.developers.find((entry) => entry.id === id);
+    const application = readMarketplaceStore().developers.find((entry) => entry.id === id);
     if (!application) throw new Error(`Developer application ${id} was not found.`);
+    updateDeveloperReview(id, "suspended", reason.trim());
     commit({
       ...current,
-      developers: current.developers.map((entry) =>
-        entry.id === id ? { ...entry, status: "suspended" as const, reviewNotes: reason.trim() } : entry,
-      ),
       auditEvents: [
         makeEvent("Developer", id, "Developer suspended", reason.trim(), `${application.status} → suspended`),
         ...current.auditEvents,
@@ -161,20 +194,13 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     const item = current.submissions.find((entry) => entry.id === id);
     if (!item) throw new Error(`Submission ${id} was not found.`);
 
-    const isCodosHostedModel = item.productType === "model" &&
-      item.payload.formB.hostingMethod === "codos_hosted";
-    const modelBundle = item.productType === "model"
-      ? item.payload.formB.bundleArchiveUrl || item.payload.formB.dockerImageTag || ""
-      : "";
     const endpoint = item.productType === "api"
       ? item.payload.formB.baseUrl
-      : item.payload.formB.hostingMethod === "developer_hosted"
-        ? item.payload.formB.inferenceEndpoint ?? ""
-        : modelBundle;
+      : item.payload.formB.inferenceEndpoint ?? "";
     const schema = item.productType === "api"
       ? item.payload.formC.openApiSpec
       : item.payload.formC.schemaJson ?? "";
-    const authMethod = item.productType === "api" ? item.payload.formD.authMethod : "n/a";
+    const authMethod = item.productType === "api" ? item.payload.formD.authMethod : item.payload.formB.authMethod;
     const legalComplete = item.productType === "api"
       ? item.payload.formF.ownershipConfirmed && item.payload.formF.commissionAccepted
       : item.payload.formF.ownershipConfirmed && item.payload.formF.prohibitedUseAgreement;
@@ -185,13 +211,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       checkedAt: new Date().toISOString(),
     });
     const checks: Record<AutomatedCheckKey, AutomatedCheckResult> = {
-      httpsEndpoint: isCodosHostedModel
-        ? modelBundle.trim()
-          ? check("pass", "A CODOS-hosted model bundle is configured.")
-          : check("fail", "A CODOS-hosted model bundle is required.")
-        : endpoint.startsWith("https://")
-          ? check("pass", "Secure HTTPS endpoint is configured.")
-          : check("fail", "A secure HTTPS endpoint is required."),
+      httpsEndpoint: endpoint.startsWith("https://")
+        ? check("pass", "Secure HTTPS endpoint is configured.")
+        : check("fail", "A secure HTTPS endpoint is required."),
       schemaValidation: (() => {
         try {
           if (!schema.trim()) return check("fail", "No API or model schema was provided.");
@@ -216,23 +238,18 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     };
     const hasFailures = Object.values(checks).some((result) => result.status === "fail");
     const nextStatus: AdminState["submissions"][number]["payload"]["status"] = hasFailures ? "Changes Requested" : "Under Review";
+    const checkSummary = hasFailures
+      ? "Automated checks found issues that require review."
+      : "Automated checks completed; awaiting admin review.";
+    updateProductChecks(id, checks, nextStatus, checkSummary);
     const next = {
       ...current,
-      submissions: current.submissions.map((entry) =>
-        entry.id === id
-          ? {
-              ...withSubmissionStatus(entry, nextStatus),
-              automatedChecks: checks,
-              reviewNotes: hasFailures ? "Automated checks found issues that require review." : entry.reviewNotes,
-            }
-          : entry,
-      ),
       auditEvents: [
         makeEvent(
           "Submission",
           id,
           "Automated checks completed",
-          `${Object.values(checks).filter((result) => result.status === "pass").length} passed, ${Object.values(checks).filter((result) => result.status === "warn").length} warnings, ${Object.values(checks).filter((result) => result.status === "fail").length} failed.`,
+          `${Object.values(checks).filter((result) => result.status === "pass").length} passed, ${Object.values(checks).filter((result) => result.status === "warn").length} warnings, ${Object.values(checks).filter((result) => result.status === "fail").length} failed. ${checkSummary}`,
           `${statusOf(item)} → Validating → Testing → ${nextStatus}`,
         ),
         ...current.auditEvents,
@@ -245,35 +262,24 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     const current = stateRef.current;
     const item = current.submissions.find((entry) => entry.id === id);
     if (!item) throw new Error(`Submission ${id} was not found.`);
-    if (item.payload.status !== "Under Review" && item.payload.status !== "Approved") {
-      throw new Error("Only submissions that have completed checks and reached review can be published.");
+    if (item.payload.status !== "Under Review") {
+      throw new Error("Only submissions that have completed checks and reached review can be approved.");
     }
     if (Object.values(item.automatedChecks).some((result) => result.status === "pending" || result.status === "fail")) {
       throw new Error("Automated checks must be complete with no failures before publication.");
     }
     const name = payloadName(item);
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    const productId = `live-${item.id}`;
-    const liveProduct = {
-      id: productId,
-      slug,
-      name,
-      productType: item.productType,
-      providerType: item.providerType,
-      developerName: item.developerName,
-      status: "Published" as const,
-      featured: false,
-      updatedAt: new Date().toISOString(),
-      submissionId: item.id,
-    };
+    updateProductReview(id, "Approved", "");
+    const shared = sharedProductsToAdmin(
+      readMarketplaceStore().products,
+      current.liveProducts.filter((product) => product.providerType === "via_codos"),
+    );
     commit({
       ...current,
-      submissions: current.submissions.map((entry) =>
-        entry.id === id ? withSubmissionStatus(entry, "Published") : entry,
-      ),
-      liveProducts: [liveProduct, ...current.liveProducts.filter((entry) => entry.id !== productId)],
+      submissions: shared.submissions,
+      liveProducts: shared.liveProducts,
       auditEvents: [
-        makeEvent("Submission", id, "Submission approved and published", name, `${item.payload.status} → Approved → Published`),
+        makeEvent("Submission", id, "Submission approved; commercial sign-off required", name, `${item.payload.status} → Approved`),
         ...current.auditEvents,
       ],
     });
@@ -284,11 +290,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     const current = stateRef.current;
     const item = current.submissions.find((entry) => entry.id === id);
     if (!item) throw new Error(`Submission ${id} was not found.`);
+    updateProductReview(id, "Changes Requested", note.trim());
     commit({
       ...current,
-      submissions: current.submissions.map((entry) =>
-        entry.id === id ? { ...withSubmissionStatus(entry, "Changes Requested"), reviewNotes: note.trim() } : entry,
-      ),
       auditEvents: [
         makeEvent("Submission", id, "Changes requested", note.trim(), `${item.payload.status} → Changes Requested`),
         ...current.auditEvents,
@@ -301,11 +305,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     const current = stateRef.current;
     const item = current.submissions.find((entry) => entry.id === id);
     if (!item) throw new Error(`Submission ${id} was not found.`);
+    updateProductReview(id, "Rejected", reason.trim());
     commit({
       ...current,
-      submissions: current.submissions.map((entry) =>
-        entry.id === id ? { ...withSubmissionStatus(entry, "Rejected"), reviewNotes: reason.trim() } : entry,
-      ),
       auditEvents: [
         makeEvent("Submission", id, "Submission rejected", reason.trim(), `${item.payload.status} → Rejected`),
         ...current.auditEvents,
@@ -318,14 +320,16 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     const current = stateRef.current;
     const product = current.liveProducts.find((entry) => entry.id === id);
     if (!product) throw new Error(`Catalog product ${id} was not found.`);
+    if (product.providerType === "third_party") {
+      updateProductReview(product.submissionId ?? product.id, "Suspended", reason.trim());
+    }
     commit({
       ...current,
-      liveProducts: current.liveProducts.map((entry) =>
-        entry.id === id ? { ...entry, status: "Suspended" as const, complianceReason: reason.trim(), updatedAt: new Date().toISOString() } : entry,
-      ),
-      submissions: product.submissionId
-        ? current.submissions.map((entry) => entry.id === product.submissionId ? withSubmissionStatus(entry, "Suspended") : entry)
-        : current.submissions,
+      liveProducts: product.providerType === "via_codos"
+        ? current.liveProducts.map((entry) =>
+            entry.id === id ? { ...entry, status: "Suspended" as const, complianceReason: reason.trim(), updatedAt: new Date().toISOString() } : entry,
+          )
+        : current.liveProducts,
       auditEvents: [
         makeEvent("Catalog", id, "Live product suspended", reason.trim(), `${product.status} → Suspended`),
         ...current.auditEvents,
@@ -340,14 +344,16 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     if (product.status !== "Suspended" && product.status !== "Unpublished") {
       throw new Error("Only suspended or unpublished products can be republished.");
     }
+    if (product.providerType === "third_party") {
+      updateProductReview(product.submissionId ?? product.id, "Published", "");
+    }
     commit({
       ...current,
-      liveProducts: current.liveProducts.map((entry) =>
-        entry.id === id ? { ...entry, status: "Published" as const, complianceReason: undefined, updatedAt: new Date().toISOString() } : entry,
-      ),
-      submissions: product.submissionId
-        ? current.submissions.map((entry) => entry.id === product.submissionId ? withSubmissionStatus(entry, "Published") : entry)
-        : current.submissions,
+      liveProducts: product.providerType === "via_codos"
+        ? current.liveProducts.map((entry) =>
+            entry.id === id ? { ...entry, status: "Published" as const, complianceReason: undefined, updatedAt: new Date().toISOString() } : entry,
+          )
+        : current.liveProducts,
       auditEvents: [
         makeEvent("Catalog", id, "Product republished", product.name, `${product.status} → Published`),
         ...current.auditEvents,
@@ -360,6 +366,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     const product = current.liveProducts.find((entry) => entry.id === id);
     if (!product) throw new Error(`Catalog product ${id} was not found.`);
     const featured = !product.featured;
+    if (product.providerType === "third_party") updateProductFeatured(id, featured);
     commit({
       ...current,
       liveProducts: current.liveProducts.map((entry) =>
@@ -464,5 +471,3 @@ export function useAdmin(): AdminContextValue {
   if (!context) throw new Error("useAdmin must be used within an AdminProvider.");
   return context;
 }
-
-export { emptyChecks };
