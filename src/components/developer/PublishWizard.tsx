@@ -3,7 +3,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useDeveloper } from "./DeveloperContext";
 import { developerApi } from "@/lib/developerApi";
-import { upsertMarketplaceProduct } from "@/lib/marketplaceStore";
+import { upsertMarketplaceProduct, type SharedProduct } from "@/lib/marketplaceStore";
+import { IntegrationPanel } from "./IntegrationPanel";
 import type {
   ApiSubmissionPayload,
   ModelSubmissionPayload,
@@ -346,6 +347,7 @@ export const PublishWizard: React.FC = () => {
   const [validationReport, setValidationReport] = useState<string[] | null>(null);
   const [upstreamCredential, setUpstreamCredential] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [confirmationProduct, setConfirmationProduct] = useState<SharedProduct | null>(null);
   const [playgroundInput, setPlaygroundInput] = useState("");
   const [editorMode, setEditorMode] = useState<SubmissionMode | "create">("create");
   const [originalSubmission, setOriginalSubmission] = useState<OriginalSubmission | null>(null);
@@ -562,7 +564,13 @@ export const PublishWizard: React.FC = () => {
         const savedProduct = await submitMarketplaceApi(submitted, upstreamCredential);
         setApiPayload(submitted);
         saveApiDraft(submitted);
-        upsertMarketplaceProduct(submitted, profile?.developerName || linkedDeveloperId, savedProduct?.id);
+        const sharedProduct = upsertMarketplaceProduct(
+          submitted,
+          profile?.developerName || linkedDeveloperId,
+          savedProduct?.id,
+          savedProduct,
+        );
+        setConfirmationProduct(sharedProduct);
         setNotice(savedProduct
           ? "Submission saved to the marketplace for review."
           : "The backend is offline. Your submission is saved locally and can be retried when it is available.");
@@ -571,7 +579,13 @@ export const PublishWizard: React.FC = () => {
         const savedProduct = await submitMarketplaceModel(submitted, upstreamCredential);
         setModelPayload(submitted);
         saveModelDraft(submitted);
-        upsertMarketplaceProduct(submitted, profile?.developerName || linkedDeveloperId, savedProduct?.id);
+        const sharedProduct = upsertMarketplaceProduct(
+          submitted,
+          profile?.developerName || linkedDeveloperId,
+          savedProduct?.id,
+          savedProduct,
+        );
+        setConfirmationProduct(sharedProduct);
         setNotice(savedProduct
           ? "Submission saved to the marketplace for review."
           : "The backend is offline. Your submission is saved locally and can be retried when it is available.");
@@ -597,6 +611,7 @@ export const PublishWizard: React.FC = () => {
     setApiPayload((current) => ({ ...current, formC: { openApiSpec } }));
 
   const handleReset = () => {
+    setConfirmationProduct(null);
     let cleanupFailed = false;
     const params = new URLSearchParams(window.location.search);
     const submissionId = params.get("draftId") ?? params.get("editId");
@@ -989,6 +1004,17 @@ export const PublishWizard: React.FC = () => {
           </>
         )}
       </div>
+      {confirmationProduct && (
+        <IntegrationPanel
+          product={confirmationProduct}
+          confirmation
+          onClose={() => setConfirmationProduct(null)}
+          onSubmitAnother={() => {
+            setConfirmationProduct(null);
+            handleReset();
+          }}
+        />
+      )}
     </div>
   );
 };

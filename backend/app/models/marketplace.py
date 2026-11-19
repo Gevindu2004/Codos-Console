@@ -53,6 +53,9 @@ class MarketplaceProduct(Base):
     logo_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     base_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     health_check_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    gateway_url: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
+    public_page_url: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
+    integration_snippets: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     auth_method: Mapped[str] = mapped_column(String(32), default="none", nullable=False)
     upstream_auth_header: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # Fernet-encrypted at rest; never included in public response schemas.

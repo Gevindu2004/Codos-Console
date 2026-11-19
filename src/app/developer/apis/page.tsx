@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useDeveloper } from "@/components/developer/DeveloperContext";
 import { SubmissionStatusBadge, AuditHistoryModal } from "@/components/developer/ui";
 import type { ApiSubmissionPayload } from "@/components/developer/types";
-import { Edit, Eye, Upload, AlertTriangle } from "lucide-react";
+import { Code2, Edit, Eye, Upload, AlertTriangle } from "lucide-react";
+import { IntegrationPanel } from "@/components/developer/IntegrationPanel";
+import type { SharedProduct } from "@/lib/marketplaceStore";
 import {
   cacheSubmissionForPublish,
   createSubmissionDraftId,
@@ -17,6 +19,7 @@ export default function MyApis() {
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditTarget, setAuditTarget] = useState<string>("");
   const [actionError, setActionError] = useState("");
+  const [integrationTarget, setIntegrationTarget] = useState<SharedProduct | null>(null);
 
   const openAudit = (name: string) => {
     setAuditTarget(name);
@@ -103,6 +106,14 @@ export default function MyApis() {
                         {action.mode === "view" ? <Eye className="w-3 h-3" /> : <Edit className="w-3 h-3" />}
                         {action.label}
                       </Link>
+                      {product && (
+                        <button
+                          onClick={() => setIntegrationTarget(product)}
+                          className="flex items-center gap-1 text-[#14B8A6] hover:underline"
+                        >
+                          <Code2 className="w-3 h-3" /> Integration / Code
+                        </button>
+                      )}
                       <button
                         onClick={() => openAudit(product?.id ?? api.formA.productName)}
                         className="flex items-center gap-1 text-[#CBD5E1] hover:text-[#F1F5F9] cursor-pointer"
@@ -153,6 +164,9 @@ export default function MyApis() {
             .sort((left, right) => right.timestamp.localeCompare(left.timestamp));
         })()}
       />
+      {integrationTarget && (
+        <IntegrationPanel product={integrationTarget} onClose={() => setIntegrationTarget(null)} />
+      )}
     </div>
   );
 }

@@ -42,6 +42,90 @@ def parse_openapi_spec(value: dict | str | None) -> dict | None:
     return parsed
 
 
+def first_api_operation(spec: dict | None) -> tuple[str, str, bool]:
+    methods = ("get", "post", "put", "patch", "delete")
+    paths = (spec or {}).get("paths", {})
+    if not isinstance(paths, dict):
+        return "/", "GET", False
+    for path, operations in paths.items():
+        if not isinstance(path, str) or not re.fullmatch(r"/[A-Za-z0-9._~:/{}-]*", path):
+            continue
+        if not isinstance(operations, dict):
+            continue
+        for method in methods:
+            operation = operations.get(method)
+            if isinstance(operation, dict):
+                has_body = "requestBody" in operation or method in {"post", "put", "patch"}
+                return path, method.upper(), has_body
+    return "/", "GET", False
+
+
+def create_integration_snippets(
+    gateway_url: str,
+    endpoint_path: str,
+    method: str,
+    has_body: bool,
+) -> dict[str, str]:
+    endpoint_url = f"{gateway_url}/{endpoint_path.lstrip('/')}" if endpoint_path.strip("/") else f"{gateway_url}/"
+    body = '{"input": "your input"}'
+    curl_body = f" \\\n  --data '{body}'" if has_body else ""
+    python_body = '    json={"input": "your input"},\n' if has_body else ""
+    typescript_body = '  body: JSON.stringify({ input: "your input" }),\n' if has_body else ""
+    return {
+        "curl": (
+            f"curl --request {method} '{endpoint_url}' \\\n"
+            "  --header 'X-CODOS-API-Key: YOUR_CODOS_API_KEY' \\\n"
+            f"  --header 'Content-Type: application/json'{curl_body}"
+        ),
+        "python": (
+            "import requests\n\n"
+            f"url = \"{endpoint_url}\"\n"
+            "headers = {\n"
+            "    \"X-CODOS-API-Key\": \"YOUR_CODOS_API_KEY\",\n"
+            "    \"Content-Type\": \"application/json\",\n"
+            "}\n"
+            f"response = requests.request(\n    \"{method}\", url, headers=headers,\n{python_body})\n"
+            "response.raise_for_status()\n"
+            "print(response.json())"
+        ),
+        "typescript": (
+            f"const response = await fetch(\"{endpoint_url}\", {{\n"
+            f"  method: \"{method}\",\n"
+            "  headers: {\n"
+            "    \"X-CODOS-API-Key\": \"YOUR_CODOS_API_KEY\",\n"
+            "    \"Content-Type\": \"application/json\",\n"
+            "  },\n"
+            f"{typescript_body}"
+            "});\n"
+            "if (!response.ok) throw new Error(`Request failed: ${response.status}`);\n"
+            "const result = await response.json();\n"
+            "console.log(result);"
+        ),
+    }
+
+
+def integration_metadata(
+    product_type: str,
+    slug: str,
+    openapi_spec: dict | None,
+    io_schema: dict | None,
+) -> tuple[str, str, dict[str, str]]:
+    gateway_url = f"{settings.MARKETPLACE_GATEWAY_BASE_URL.rstrip('/')}/{slug}"
+    public_page_url = f"/{'apis' if product_type == 'api' else 'models'}/{slug}"
+    if product_type == "api":
+        endpoint_path, method, has_body = first_api_operation(openapi_spec)
+    else:
+        endpoint_path = (io_schema or {}).get("inference_path") or "/infer"
+        if (
+            not isinstance(endpoint_path, str)
+            or not re.fullmatch(r"/[A-Za-z0-9._~:/{}-]*", endpoint_path)
+        ):
+            endpoint_path = "/infer"
+        method, has_body = "POST", True
+    snippets = create_integration_snippets(gateway_url, endpoint_path, method, has_body)
+    return gateway_url, public_page_url, snippets
+
+
 def validate_upstream_url(value: str, label: str) -> None:
     parsed = urlsplit(value)
     if (
@@ -178,18 +262,35 @@ async def create_product(
         raise HTTPException(status_code=422, detail="The upstream authentication header is reserved.")
 
     slug = payload.slug or make_slug(payload.name)
+    openapi_spec = parse_openapi_spec(payload.openapi_spec)
+    gateway_url, public_page_url, integration_snippets = integration_metadata(
+        payload.product_type,
+        slug,
+        openapi_spec,
+        payload.io_schema,
+    )
     product = MarketplaceProduct(
         **payload.model_dump(
-            exclude={"slug", "upstream_api_key", "openapi_spec"},
+            exclude={
+                "slug",
+                "upstream_api_key",
+                "openapi_spec",
+                "gateway_url",
+                "public_page_url",
+                "integration_snippets",
+            },
             mode="json",
         ),
         slug=slug,
+        gateway_url=gateway_url,
+        public_page_url=public_page_url,
+        integration_snippets=integration_snippets,
         upstream_api_key=(
             encrypt_secret(payload.upstream_api_key)
             if auth_method != "none" and payload.upstream_api_key
             else None
         ),
-        openapi_spec=parse_openapi_spec(payload.openapi_spec),
+        openapi_spec=openapi_spec,
         status="Submitted",
     )
     db.add(product)

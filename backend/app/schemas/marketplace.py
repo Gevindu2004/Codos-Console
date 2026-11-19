@@ -80,6 +80,9 @@ class MarketplaceProductRead(BaseModel):
     logo_url: str | None
     base_url: str
     health_check_url: str | None
+    gateway_url: str
+    public_page_url: str
+    integration_snippets: dict[str, str]
     auth_method: str
     upstream_auth_header: str | None
     openapi_spec: dict[str, Any] | None

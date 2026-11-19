@@ -17,7 +17,10 @@ import {
   getAdminMarketplaceProducts,
   updateMarketplaceDeveloperStatus,
   updateMarketplaceProductStatus,
+  generateMarketplaceIntegrationMetadata,
+  isIntegrationSnippets,
   type MarketplaceDeveloperRecord,
+  type MarketplaceIntegrationMetadata,
   type MarketplaceProductRecord,
 } from "@/lib/developerApi";
 
@@ -34,6 +37,9 @@ export type SharedProduct = AdminSubmissionItem & {
   developerId: string;
   marketplaceProductId?: string;
   slug: string;
+  gatewayUrl: string;
+  publicPageUrl: string;
+  integrationSnippets: MarketplaceIntegrationMetadata["integration_snippets"];
   updatedAt: string;
   featured?: boolean;
   auditLogs: Array<{ timestamp: string; actor: string; action: string; details?: Record<string, unknown> }>;
@@ -69,9 +75,37 @@ export function readMarketplaceStore(): MarketplaceStoreState {
   const saved = window.localStorage.getItem(STORE_KEY);
   if (!saved) return emptyState();
   const parsed = JSON.parse(saved) as Partial<MarketplaceStoreState>;
+  const products = Array.isArray(parsed.products) ? parsed.products : [];
   return {
     developers: Array.isArray(parsed.developers) ? parsed.developers : [],
-    products: Array.isArray(parsed.products) ? parsed.products : [],
+    products: products.map((product) => {
+      if (product.gatewayUrl && product.publicPageUrl && isIntegrationSnippets(product.integrationSnippets)) return product;
+      let ioSchema: Record<string, unknown> | null = null;
+      if (product.productType === "model" && product.payload.formC.schemaJson?.trim()) {
+        try {
+          const parsedSchema = JSON.parse(product.payload.formC.schemaJson) as unknown;
+          if (typeof parsedSchema === "object" && parsedSchema !== null && !Array.isArray(parsedSchema)) {
+            ioSchema = parsedSchema as Record<string, unknown>;
+          }
+        } catch {
+          ioSchema = null;
+        }
+      }
+      const metadata = generateMarketplaceIntegrationMetadata(
+        product.productType,
+        product.slug,
+        product.productType === "api" ? product.payload.formC.openApiSpec : null,
+        ioSchema,
+      );
+      return {
+        ...product,
+        gatewayUrl: product.gatewayUrl || metadata.gateway_url,
+        publicPageUrl: product.publicPageUrl || metadata.public_page_url,
+        integrationSnippets: isIntegrationSnippets(product.integrationSnippets)
+          ? product.integrationSnippets
+          : metadata.integration_snippets,
+      };
+    }),
   };
 }
 
@@ -282,20 +316,50 @@ export function upsertMarketplaceProduct(
   payload: ApiSubmissionPayload | ModelSubmissionPayload,
   developerName: string,
   marketplaceProductId?: string,
+  savedRecord?: MarketplaceProductRecord | null,
 ): SharedProduct {
   const state = readMarketplaceStore();
   const name = isApiPayload(payload) ? payload.formA.productName : payload.formA.modelName;
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "product";
+  const slug = savedRecord?.slug
+    || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+    || "product";
   const now = new Date().toISOString();
   const existing = state.products.find((product) =>
     (marketplaceProductId !== undefined && product.marketplaceProductId === marketplaceProductId)
     || (product.developerId === payload.formA.developerId && product.slug === slug),
   );
   const id = existing?.id ?? marketplaceProductId ?? newId("product");
+  let ioSchema: Record<string, unknown> | null = null;
+  if (!isApiPayload(payload) && payload.formC.schemaJson?.trim()) {
+    try {
+      const parsed = JSON.parse(payload.formC.schemaJson) as unknown;
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        ioSchema = parsed as Record<string, unknown>;
+      }
+    } catch {
+      ioSchema = null;
+    }
+  }
+  const fallbackMetadata = generateMarketplaceIntegrationMetadata(
+    isApiPayload(payload) ? "api" : "model",
+    slug,
+    isApiPayload(payload) ? payload.formC.openApiSpec : null,
+    ioSchema,
+  );
+  const metadata = {
+    gateway_url: savedRecord?.gateway_url || fallbackMetadata.gateway_url,
+    public_page_url: savedRecord?.public_page_url || fallbackMetadata.public_page_url,
+    integration_snippets: isIntegrationSnippets(savedRecord?.integration_snippets)
+      ? savedRecord.integration_snippets
+      : fallbackMetadata.integration_snippets,
+  };
   const sharedFields = {
     id,
-    marketplaceProductId: marketplaceProductId ?? existing?.marketplaceProductId,
+    marketplaceProductId: savedRecord?.id ?? marketplaceProductId ?? existing?.marketplaceProductId,
     slug,
+    gatewayUrl: metadata.gateway_url,
+    publicPageUrl: metadata.public_page_url,
+    integrationSnippets: metadata.integration_snippets,
     developerId: payload.formA.developerId,
     developerName,
     providerType: "third_party" as const,
@@ -454,10 +518,21 @@ export async function syncMarketplaceProductsFromBackend(): Promise<void> {
       const current = state.products.find((product) => product.marketplaceProductId === record.id);
       const developer = state.developers.find((entry) => entry.id === record.developer_id);
       const auditLogs = record.audit_logs ?? current?.auditLogs ?? [];
+      const fallbackMetadata = generateMarketplaceIntegrationMetadata(
+        record.product_type,
+        record.slug,
+        record.openapi_spec,
+        record.io_schema,
+      );
       const common = {
         id: current?.id ?? record.id,
         marketplaceProductId: record.id,
         slug: record.slug,
+        gatewayUrl: record.gateway_url || fallbackMetadata.gateway_url,
+        publicPageUrl: record.public_page_url || fallbackMetadata.public_page_url,
+        integrationSnippets: isIntegrationSnippets(record.integration_snippets)
+          ? record.integration_snippets
+          : fallbackMetadata.integration_snippets,
         developerId: record.developer_id,
         developerName: current?.developerName ?? developer?.developerName ?? record.developer_id,
         providerType: record.provider_type,

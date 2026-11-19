@@ -11,7 +11,27 @@ import type {
 
 const baseURL = process.env.NEXT_PUBLIC_API_URL ?? "/api/v1/developer";
 export const apiV1BaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
+const gatewayBaseUrl =
+  process.env.NEXT_PUBLIC_MARKETPLACE_GATEWAY_BASE_URL ?? "http://localhost:8000/api/v1/gateway";
 const MARKETPLACE_ADMIN_TOKEN_KEY = "marketplace-admin-token";
+
+export interface IntegrationSnippets {
+  curl: string;
+  python: string;
+  typescript: string;
+}
+
+export interface MarketplaceIntegrationMetadata {
+  gateway_url: string;
+  public_page_url: string;
+  integration_snippets: IntegrationSnippets;
+}
+
+export function isIntegrationSnippets(value: unknown): value is IntegrationSnippets {
+  if (typeof value !== "object" || value === null) return false;
+  const snippets = value as Record<string, unknown>;
+  return ["curl", "python", "typescript"].every((key) => typeof snippets[key] === "string");
+}
 
 function getMarketplaceAdminToken(promptForToken: boolean): string | null {
   if (typeof window === "undefined") return null;
@@ -38,6 +58,9 @@ export interface MarketplaceProductRecord {
   logo_url: string | null;
   base_url: string;
   health_check_url: string | null;
+  gateway_url?: string;
+  public_page_url?: string;
+  integration_snippets?: IntegrationSnippets;
   auth_method: string;
   upstream_auth_header: string | null;
   openapi_spec: Record<string, unknown> | null;
@@ -51,6 +74,121 @@ export interface MarketplaceProductRecord {
   audit_logs: Array<{ timestamp: string; actor: string; action: string; details?: Record<string, unknown> }> | null;
   created_at: string;
   updated_at: string;
+}
+
+function firstOpenApiOperation(spec: string | Record<string, unknown> | null | undefined): {
+  path: string;
+  method: string;
+  hasBody: boolean;
+} {
+  const methods = ["get", "post", "put", "patch", "delete"];
+  if (typeof spec === "object" && spec !== null) {
+    const paths = spec.paths;
+    if (typeof paths === "object" && paths !== null) {
+      for (const [path, operations] of Object.entries(paths)) {
+        if (!/^\/[A-Za-z0-9._~:/{}-]*$/.test(path) || typeof operations !== "object" || operations === null) continue;
+        const definition = operations as Record<string, unknown>;
+        const method = methods.find((candidate) =>
+          typeof definition[candidate] === "object" && definition[candidate] !== null,
+        );
+        if (method) {
+          const operation = definition[method] as Record<string, unknown>;
+          return {
+            path,
+            method: method.toUpperCase(),
+            hasBody: "requestBody" in operation || ["post", "put", "patch"].includes(method),
+          };
+        }
+      }
+    }
+    return { path: "/", method: "GET", hasBody: false };
+  }
+  if (typeof spec !== "string" || !spec.trim()) return { path: "/", method: "GET", hasBody: false };
+
+  try {
+    return firstOpenApiOperation(JSON.parse(spec) as Record<string, unknown>);
+  } catch {
+    const lines = spec.split(/\r?\n/);
+    const pathsIndex = lines.findIndex((line) => /^\s*paths\s*:\s*(?:#.*)?$/.test(line));
+    if (pathsIndex < 0) return { path: "/", method: "GET", hasBody: false };
+    const pathsIndent = lines[pathsIndex].search(/\S/);
+    for (let index = pathsIndex + 1; index < lines.length; index += 1) {
+      const pathMatch = lines[index].match(/^(\s*)(["']?\/[^:'"]+["']?)\s*:\s*(?:#.*)?$/);
+      if (!pathMatch) {
+        const indent = lines[index].search(/\S/);
+        if (indent >= 0 && indent <= pathsIndent) break;
+        continue;
+      }
+      const pathIndent = pathMatch[1].length;
+      const path = pathMatch[2].replace(/^["']|["']$/g, "");
+      if (!/^\/[A-Za-z0-9._~:/{}-]*$/.test(path)) continue;
+      const operations = new Set<string>();
+      let hasRequestBody = false;
+      for (let child = index + 1; child < lines.length; child += 1) {
+        const indent = lines[child].search(/\S/);
+        if (indent >= 0 && indent <= pathIndent) break;
+        const methodMatch = lines[child].match(/^\s+(get|post|put|patch|delete)\s*:/i);
+        if (methodMatch) operations.add(methodMatch[1].toLowerCase());
+        if (/^\s+requestBody\s*:/.test(lines[child])) hasRequestBody = true;
+      }
+      const method = methods.find((candidate) => operations.has(candidate));
+      if (method) {
+        return {
+          path,
+          method: method.toUpperCase(),
+          hasBody: hasRequestBody || ["post", "put", "patch"].includes(method),
+        };
+      }
+    }
+    return { path: "/", method: "GET", hasBody: false };
+  }
+}
+
+function createIntegrationSnippets(
+  gatewayUrl: string,
+  endpointPath: string,
+  method: string,
+  hasBody: boolean,
+): IntegrationSnippets {
+  const path = endpointPath.replace(/^\/+/, "");
+  const endpointUrl = path ? `${gatewayUrl}/${path}` : `${gatewayUrl}/`;
+  const curlBody = hasBody ? " \\\n  --data '{\"input\": \"your input\"}'" : "";
+  const pythonBody = hasBody ? '    json={"input": "your input"},\n' : "";
+  const typescriptBody = hasBody ? '  body: JSON.stringify({ input: "your input" }),\n' : "";
+  return {
+    curl: `curl --request ${method} '${endpointUrl}' \\\n  --header 'X-CODOS-API-Key: YOUR_CODOS_API_KEY' \\\n  --header 'Content-Type: application/json'${curlBody}`,
+    python: `import requests\n\nurl = "${endpointUrl}"\nheaders = {\n    "X-CODOS-API-Key": "YOUR_CODOS_API_KEY",\n    "Content-Type": "application/json",\n}\nresponse = requests.request(\n    "${method}", url, headers=headers,\n${pythonBody})\nresponse.raise_for_status()\nprint(response.json())`,
+    typescript: `const response = await fetch("${endpointUrl}", {\n  method: "${method}",\n  headers: {\n    "X-CODOS-API-Key": "YOUR_CODOS_API_KEY",\n    "Content-Type": "application/json",\n  },\n${typescriptBody}});\nif (!response.ok) throw new Error(\`Request failed: \${response.status}\`);\nconst result = await response.json();\nconsole.log(result);`,
+  };
+}
+
+export function generateMarketplaceIntegrationMetadata(
+  productType: "api" | "model",
+  slug: string,
+  openapiSpec?: string | Record<string, unknown> | null,
+  ioSchema?: Record<string, unknown> | null,
+): MarketplaceIntegrationMetadata {
+  const gateway_url = `${gatewayBaseUrl.replace(/\/+$/, "")}/${slug}`;
+  const public_page_url = `/${productType === "api" ? "apis" : "models"}/${slug}`;
+  let endpointPath: string;
+  let method: string;
+  let hasBody: boolean;
+  if (productType === "api") {
+    ({ path: endpointPath, method, hasBody } = firstOpenApiOperation(openapiSpec));
+  } else {
+    const inferencePath = ioSchema?.inference_path;
+    endpointPath =
+      typeof inferencePath === "string" && /^\/[A-Za-z0-9._~:/{}-]*$/.test(inferencePath)
+        ? inferencePath
+        : "/infer";
+    method = "POST";
+    hasBody = true;
+  }
+  return {
+    gateway_url,
+    public_page_url,
+    integration_snippets: createIntegrationSnippets(gateway_url, endpointPath, method, hasBody),
+  };
 }
 
 export interface MarketplaceDeveloperRecord {
