@@ -1,7 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Check } from "lucide-react";
+import {
+  getCurrentDeveloperId,
+  getDeveloperProfile,
+  registerDeveloper,
+  subscribeMarketplaceStore,
+  syncMarketplaceDeveloperRecord,
+} from "@/lib/marketplaceStore";
+import { postMarketplaceDeveloper } from "@/lib/developerApi";
+import type { DeveloperProfile } from "@/components/developer/types";
 
 type RegistrationForm = {
   developerName: string;
@@ -33,6 +42,13 @@ export default function DeveloperRegistration() {
   const [errors, setErrors] = useState<RegistrationErrors>({});
   const [emailNotice, setEmailNotice] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [profile, setProfile] = useState<DeveloperProfile | null>(null);
+
+  useEffect(() => {
+    const refresh = () => setProfile(getDeveloperProfile(getCurrentDeveloperId()));
+    refresh();
+    return subscribeMarketplaceStore(refresh);
+  }, []);
 
   const updateField = (field: RegistrationField, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -40,7 +56,7 @@ export default function DeveloperRegistration() {
     setSubmitted(false);
   };
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextErrors: RegistrationErrors = {};
     if (!form.developerName.trim()) {
@@ -62,7 +78,38 @@ export default function DeveloperRegistration() {
     }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
+    let saved: DeveloperProfile;
+    try {
+      saved = registerDeveloper({
+        developerName: form.developerName.trim(),
+        companyName: form.companyName.trim(),
+        email: form.email.trim(),
+        emailVerified: false,
+        country: form.country,
+        website: form.website.trim() || undefined,
+        supportContact: form.supportContact.trim(),
+      });
+    } catch (error) {
+      console.error("Could not save developer registration.", error);
+      setEmailNotice("Registration could not be saved. Check browser storage and try again.");
+      return;
+    }
+    setProfile(saved);
     setSubmitted(true);
+    try {
+      const persisted = await postMarketplaceDeveloper(saved);
+      if (persisted) {
+        setProfile(syncMarketplaceDeveloperRecord(persisted, true));
+        setEmailNotice("");
+      } else {
+        setEmailNotice("The backend is offline. Your registration is saved locally and will need to be resubmitted when it is available.");
+      }
+    } catch (error) {
+      console.error("Could not sync developer registration with the backend.", error);
+      setEmailNotice(error instanceof Error
+        ? `Saved locally, but backend sync failed: ${error.message}`
+        : "Saved locally, but backend sync failed.");
+    }
   };
 
   const fieldError = (field: RegistrationField) =>
@@ -277,6 +324,12 @@ export default function DeveloperRegistration() {
       {submitted && (
         <div role="status" className="rounded-md bg-[#34D399]/10 p-4 text-[#34D399]">
           Registration submitted! Your profile will be reviewed shortly.
+        </div>
+      )}
+      {!submitted && profile && (
+        <div className="rounded-md border border-[#14B8A6]/20 bg-[#0F172A] p-4 text-sm">
+          <p>Verification status: <strong className="capitalize">{profile.status}</strong></p>
+          {profile.reviewNotes && <p className="mt-2 text-xs text-[#CBD5E1]">Admin review: {profile.reviewNotes}</p>}
         </div>
       )}
     </div>

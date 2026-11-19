@@ -15,7 +15,7 @@ export type SubmissionStatus =
   | "Unpublished";
 
 export type ProductType = "api" | "model";
-export type HostingMethod = "developer_hosted" | "codos_hosted";
+export type UpstreamAuthMethod = "api_key" | "bearer" | "basic" | "oauth2" | "none" | "";
 
 export interface DeveloperProfile {
   id: string;
@@ -28,7 +28,9 @@ export interface DeveloperProfile {
   supportContact?: string;
   payoutMethod: "bank" | "stripe" | "paypal" | "none";
   payoutDetails?: Record<string, any>;
-  status: "unregistered" | "pending" | "approved" | "rejected";
+  status: "unregistered" | "pending" | "approved" | "rejected" | "suspended";
+  reviewNotes?: string;
+  submittedAt?: string;
 }
 
 // ---- API Submission payload (Forms A‑F) ----
@@ -54,13 +56,12 @@ export interface ApiSubmissionFormC {
   openApiSpec: string; // raw JSON/YAML string
 }
 export interface ApiSubmissionFormD {
-  authMethod: "api_key" | "bearer" | "basic" | "oauth2" | "none" | "";
-  credentialsMasked?: string; // never store raw secret on client
+  authMethod: UpstreamAuthMethod;
+  upstreamAuthHeader?: string;
 }
 export interface ApiSubmissionFormE {
-  pricingModel: string[]; // e.g. ["free", "pay_per_request"]
+  pricingModel: string[];
   pricePerRequest?: number;
-  freeTrialAllowance?: number;
   monthlyLimit?: number;
   rpm?: number;
   maxConcurrency?: number;
@@ -100,23 +101,14 @@ export interface ModelSubmissionFormA {
   fineTuned?: boolean;
 }
 export interface ModelSubmissionFormB {
-  hostingMethod: HostingMethod | "";
-  // Developer‑hosted fields
-  inferenceEndpoint?: string; // HTTPS URL when developer_hosted
+  authMethod: UpstreamAuthMethod;
+  upstreamAuthHeader?: string;
+  inferenceEndpoint?: string; // Developer-managed HTTPS inference endpoint
   hostingProvider?: string;
   healthCheckPath?: string;
   expectedLatencyMs?: number;
   availabilityPct?: number;
   maxRequestSizeMb?: number;
-  // CODOS‑hosted fields
-  dockerImageTag?: string;
-  bundleArchiveUrl?: string;
-  requiredRamGb?: number;
-  requiredGpu?: string;
-  runtimeVersion?: string;
-  dependenciesFileUrl?: string;
-  startupCommand?: string;
-  entrypoint?: string;
 }
 export interface ModelSubmissionFormC {
   inputType: "text" | "image" | "audio" | "video" | "document" | "json" | "";
@@ -136,7 +128,7 @@ export interface ModelSubmissionFormD {
   knownLimitations?: string;
 }
 export interface ModelSubmissionFormE {
-  billingUnit: "free" | "per_inference" | "per_image" | "per_video_min" | "per_audio_min" | "per_token" | "subscription" | "credit_package" | "";
+  billingUnit: "per_inference" | "per_image" | "per_video_min" | "per_audio_min" | "per_token" | "subscription" | "credit_package" | "";
   rate?: number;
   limits?: string;
 }

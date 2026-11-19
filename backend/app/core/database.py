@@ -12,7 +12,7 @@ class Base(DeclarativeBase):
 
 
 async def init_db():
-    """Enable pgvector extension and create all SkyBeak tables."""
+    """Enable pgvector and create all registered application tables."""
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)

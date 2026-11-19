@@ -5,24 +5,23 @@ import Link from "next/link";
 import { useDeveloper } from "@/components/developer/DeveloperContext";
 import { SubmissionStatusBadge, AuditHistoryModal } from "@/components/developer/ui";
 import type { ApiSubmissionPayload } from "@/components/developer/types";
-import { Edit, Eye, Upload, AlertTriangle } from "lucide-react";
+import { Code2, Edit, Eye, Upload, AlertTriangle } from "lucide-react";
+import { IntegrationPanel } from "@/components/developer/IntegrationPanel";
+import { CommercialSignOffModal } from "@/components/developer/CommercialSignOffModal";
+import type { SharedProduct } from "@/lib/marketplaceStore";
 import {
   cacheSubmissionForPublish,
   createSubmissionDraftId,
   getPrimarySubmissionAction,
 } from "@/components/developer/submissionActions";
 
-const mockAuditEntries = [
-  { timestamp: "2026-11-15 10:22", actor: "CODOS System", action: "Validation passed — OpenAPI schema is valid." },
-  { timestamp: "2026-11-14 09:00", actor: "developer", action: "Submitted for review." },
-  { timestamp: "2026-11-13 18:45", actor: "developer", action: "Saved as draft." },
-];
-
 export default function MyApis() {
-  const { apiSubmissions } = useDeveloper();
+  const { apiProducts, apiSubmissions } = useDeveloper();
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditTarget, setAuditTarget] = useState<string>("");
   const [actionError, setActionError] = useState("");
+  const [integrationTarget, setIntegrationTarget] = useState<SharedProduct | null>(null);
+  const [commercialTarget, setCommercialTarget] = useState<SharedProduct | null>(null);
 
   const openAudit = (name: string) => {
     setAuditTarget(name);
@@ -74,9 +73,10 @@ export default function MyApis() {
               apiSubmissions.map((api: ApiSubmissionPayload, idx: number) => {
                 const action = getPrimarySubmissionAction(api.status);
                 const draftId = createSubmissionDraftId("api", idx);
+                const product = apiProducts[idx];
                 return (
                 <tr
-                  key={idx}
+                  key={product?.id ?? idx}
                   className="border-b border-[#F1F5F9]/5 hover:bg-[#F1F5F9]/5 transition-colors"
                 >
                   <td className="px-4 py-3 text-[#F1F5F9] font-medium">
@@ -108,8 +108,24 @@ export default function MyApis() {
                         {action.mode === "view" ? <Eye className="w-3 h-3" /> : <Edit className="w-3 h-3" />}
                         {action.label}
                       </Link>
+                      {product && (
+                        <button
+                          onClick={() => setIntegrationTarget(product)}
+                          className="flex items-center gap-1 text-[#14B8A6] hover:underline"
+                        >
+                          <Code2 className="w-3 h-3" /> Integration / Code
+                        </button>
+                      )}
+                      {product && api.status === "Approved" && (
+                        <button
+                          onClick={() => setCommercialTarget(product)}
+                          className="flex items-center gap-1 rounded-md bg-teal-400/10 px-2 py-1 text-teal-200 hover:bg-teal-400/20"
+                        >
+                          Sign Agreement &amp; Set Pricing
+                        </button>
+                      )}
                       <button
-                        onClick={() => openAudit(api.formA.productName)}
+                        onClick={() => openAudit(product?.id ?? api.formA.productName)}
                         className="flex items-center gap-1 text-[#CBD5E1] hover:text-[#F1F5F9] cursor-pointer"
                       >
                         <Eye className="w-3 h-3" /> Audit
@@ -145,11 +161,25 @@ export default function MyApis() {
       <AuditHistoryModal
         open={auditOpen}
         onClose={() => setAuditOpen(false)}
-        entries={mockAuditEntries.map((e) => ({
-          ...e,
-          details: { product: auditTarget },
-        }))}
+        entries={(() => {
+          const product = apiProducts.find((entry) => entry.id === auditTarget);
+          if (!product) return [];
+          const currentReview = {
+            timestamp: product.updatedAt,
+            actor: "CODOS Admin",
+            action: `Current status: ${product.payload.status}`,
+            details: { status: product.payload.status, reviewNotes: product.reviewNotes || "No review notes." },
+          };
+          return [currentReview, ...product.auditLogs]
+            .sort((left, right) => right.timestamp.localeCompare(left.timestamp));
+        })()}
       />
+      {integrationTarget && (
+        <IntegrationPanel product={integrationTarget} onClose={() => setIntegrationTarget(null)} />
+      )}
+      {commercialTarget && (
+        <CommercialSignOffModal product={commercialTarget} onClose={() => setCommercialTarget(null)} />
+      )}
     </div>
   );
 }

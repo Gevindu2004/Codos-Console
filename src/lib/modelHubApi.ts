@@ -1,4 +1,5 @@
-import { developerApi } from "./developerApi";
+import { getPublishedMarketplaceProducts } from "./developerApi";
+import { readMarketplaceStore } from "./marketplaceStore";
 import { skybeakApi, type CatalogModel } from "./skybeakApi";
 import type {
   MarketplaceModel,
@@ -119,13 +120,12 @@ function normalizeSkyBeak(model: CatalogModel): MarketplaceModel {
     pricingModel: "per_token",
     priceDisplay: "$0.0008",
     unitLabel: "per 1K tokens",
-    freeTierAllowance: "50,000 tokens",
     avgLatencyMs: latency,
     status: "Published",
     inputType: "Text",
     skybeakCatalogId: model.id,
     plans: [
-      { name: "Pay as you go", description: "Flexible token billing", price: "$0.0008 / 1K tokens" },
+      { name: "Pay-as-you-go", description: "Flexible token billing", price: "$0.0008 / 1K tokens" },
       { name: "Developer", description: "Monthly quota and priority routing", price: "$49 / month" },
     ],
   };
@@ -158,7 +158,6 @@ const representativeModels: MarketplaceModel[] = [
     pricingModel: "per_inference",
     priceDisplay: "$0.012",
     unitLabel: "per document",
-    freeTierAllowance: "25 documents",
     avgLatencyMs: 860,
     status: "Published",
     inputType: "Document",
@@ -181,7 +180,7 @@ const representativeModels: MarketplaceModel[] = [
     framework: "TensorFlow",
     baseModel: "Voxline-ASR-Large",
     license: "Commercial",
-    hostingMethod: "codos_hosted",
+    hostingMethod: "developer_hosted",
     supportedLanguages: ["English", "Sinhala", "Tamil", "Hindi"],
     useCases: ["Call transcription", "Meeting notes", "Content indexing"],
     limitations: "Very noisy environments may require a custom vocabulary.",
@@ -191,7 +190,6 @@ const representativeModels: MarketplaceModel[] = [
     pricingModel: "per_audio_minute",
     priceDisplay: "$0.006",
     unitLabel: "per audio minute",
-    freeTierAllowance: "30 minutes",
     avgLatencyMs: 1250,
     status: "Published",
     inputType: "Audio",
@@ -224,7 +222,6 @@ const representativeModels: MarketplaceModel[] = [
     pricingModel: "per_image",
     priceDisplay: "$0.035",
     unitLabel: "per generated image",
-    freeTierAllowance: "10 images",
     avgLatencyMs: 3200,
     status: "Published",
     inputType: "Image",
@@ -248,7 +245,7 @@ const extraRepresentativeModels: MarketplaceModel[] = [
     framework: "PyTorch",
     baseModel: "Auralis-TTS-XL",
     license: "Commercial",
-    hostingMethod: "codos_hosted",
+    hostingMethod: "developer_hosted",
     supportedLanguages: ["English", "Sinhala", "Tamil", "Hindi"],
     useCases: ["IVR", "Audiobooks", "Accessibility"],
     limitations: "Custom speaker cloning requires separate consent and verification.",
@@ -258,7 +255,6 @@ const extraRepresentativeModels: MarketplaceModel[] = [
     pricingModel: "per_audio_minute",
     priceDisplay: "$0.012",
     unitLabel: "per audio minute",
-    freeTierAllowance: "10 minutes",
     avgLatencyMs: 980,
     status: "Published",
     inputType: "Audio",
@@ -289,7 +285,6 @@ const extraRepresentativeModels: MarketplaceModel[] = [
     pricingModel: "per_image",
     priceDisplay: "$0.018",
     unitLabel: "per image",
-    freeTierAllowance: "50 images",
     avgLatencyMs: 740,
     status: "Published",
     inputType: "Image",
@@ -312,7 +307,7 @@ const extraRepresentativeModels: MarketplaceModel[] = [
     framework: "Python",
     baseModel: "MetricCore-Analyst",
     license: "Commercial",
-    hostingMethod: "codos_hosted",
+    hostingMethod: "developer_hosted",
     supportedLanguages: ["English"],
     useCases: ["Revenue analysis", "Anomaly detection", "Forecasting"],
     limitations: "Recommendations should be validated for sensitive financial decisions.",
@@ -322,7 +317,6 @@ const extraRepresentativeModels: MarketplaceModel[] = [
     pricingModel: "subscription",
     priceDisplay: "$29",
     unitLabel: "per month",
-    freeTierAllowance: "2 datasets",
     avgLatencyMs: 1100,
     status: "Published",
     inputType: "Document",
@@ -353,7 +347,6 @@ const extraRepresentativeModels: MarketplaceModel[] = [
     pricingModel: "per_video_minute",
     priceDisplay: "$0.09",
     unitLabel: "per video minute",
-    freeTierAllowance: "5 minutes",
     avgLatencyMs: 2800,
     status: "Published",
     inputType: "Video",
@@ -362,76 +355,162 @@ const extraRepresentativeModels: MarketplaceModel[] = [
   },
 ];
 
-function normalizeDeveloperModels(payloads: Awaited<ReturnType<typeof developerApi.listModels>>): MarketplaceModel[] {
-  return payloads
-    .filter((payload) => payload.status === "Published" || payload.status === "Approved")
-    .map((payload, index) => {
-      const form = payload.formA;
-      const category = (form.category || "Text generation & LLMs") as ModelCategory;
-      const validCategory = [
-        "Text generation & LLMs",
-        "Image generation & editing",
-        "Video generation & editing",
-        "Speech recognition",
-        "Text-to-speech",
-        "Document processing",
-        "Image recognition",
-        "Data analysis",
-        "Industry-specific AI",
-      ].includes(category) ? category : "Text generation & LLMs";
-      const billing = payload.formE.billingUnit as PricingModel;
-      const schemaInputType = payload.formC.inputType;
-      const inputType = schemaInputType === "audio"
-        ? "Audio"
-        : schemaInputType === "image"
-          ? "Image"
-          : schemaInputType === "video"
-            ? "Video"
-            : schemaInputType === "document"
-              ? "Document"
-              : "Text";
+function normalizeMarketplaceModels(products: Awaited<ReturnType<typeof getPublishedMarketplaceProducts>>): MarketplaceModel[] {
+  const categories: ModelCategory[] = [
+    "Text generation & LLMs",
+    "Image generation & editing",
+    "Video generation & editing",
+    "Speech recognition",
+    "Text-to-speech",
+    "Document processing",
+    "Image recognition",
+    "Data analysis",
+    "Industry-specific AI",
+  ];
+  const pricingModels: PricingModel[] = [
+    "per_token",
+    "per_inference",
+    "per_image",
+    "per_video_minute",
+    "per_audio_minute",
+    "subscription",
+    "credit_package",
+  ];
+  return products
+    .filter((product) => product.product_type === "model")
+    .map((product) => {
+      const ioSchema = product.io_schema ?? {};
+      const inputType = String(ioSchema.input_type ?? "text").toLowerCase();
+      const validInputType = ["image", "audio", "video", "document"].includes(inputType)
+        ? inputType.charAt(0).toUpperCase() + inputType.slice(1)
+        : "Text";
+      const rawPricing = product.pricing_model === "per_video_min"
+        ? "per_video_minute"
+        : product.pricing_model === "per_audio_min"
+          ? "per_audio_minute"
+          : product.pricing_model;
+      const pricingModel = pricingModels.includes(rawPricing as PricingModel)
+        ? rawPricing as PricingModel
+        : "per_inference";
+      const retailDisplay = `$${product.final_retail_price.toFixed(6)}`;
       return {
-        id: `developer-model-${index}`,
-        slug: slugify(form.modelName || `developer-model-${index}`),
-        name: form.modelName,
-        tagline: form.shortDescription,
-        description: form.detailedDescription,
+        id: product.id,
+        slug: product.slug,
+        name: product.name,
+        tagline: product.short_description,
+        description: product.detailed_description,
         providerType: "third_party",
-        developerName: form.developerId || "Independent Developer",
+        developerName: product.developer_id,
         developerVerified: true,
-        supportContact: "support@developer.example",
-        category: validCategory,
-        version: form.version || "1.0",
-        architecture: form.architecture || "Published model",
-        framework: form.framework || "Custom",
-        baseModel: form.baseModel || "Developer-provided",
-        license: payload.formF.baseModelLicense || "Developer license",
-        hostingMethod: payload.formB.hostingMethod === "developer_hosted" ? "developer_hosted" : "codos_hosted",
-        supportedLanguages: form.supportedLanguages || ["English"],
-        useCases: form.useCases || [],
-        limitations: payload.formD.knownLimitations || "No limitations provided.",
-        inputSchema: payload.formC.schemaJson ? (() => {
-          try {
-            return JSON.parse(payload.formC.schemaJson) as Record<string, unknown>;
-          } catch {
-            return { type: "object", properties: { prompt: { type: "string" } }, required: ["prompt"] };
-          }
-        })() : { type: "object", properties: { prompt: { type: "string" } }, required: ["prompt"] },
-        outputSchema: { type: "object", properties: { response: { type: "string" } } },
-        sampleInputs: payload.formD.sampleInputs || [],
-        pricingModel: ["free", "per_token", "per_inference", "per_image", "per_video_minute", "per_audio_minute", "subscription", "credit_package"].includes(billing)
-          ? billing
-          : "per_inference",
-        priceDisplay: payload.formE.rate ? `$${payload.formE.rate}` : "Free",
-        unitLabel: payload.formE.billingUnit === "per_token" ? "per token" : "per inference",
-        freeTierAllowance: "Developer-defined trial",
-        avgLatencyMs: payload.formB.expectedLatencyMs || 900,
-        status: payload.status as "Published" | "Approved",
-        inputType,
-        acceptedFormats: payload.formC.inputFormats,
-        maxFileSizeMb: payload.formC.maxInputSizeMb,
+        supportContact: "Developer support via CODOS",
+        category: categories.includes(product.category as ModelCategory) ? product.category as ModelCategory : "Text generation & LLMs",
+        version: product.version,
+        architecture: "Developer-hosted model",
+        framework: "Developer-provided",
+        baseModel: "Developer-provided",
+        license: "Developer-provided",
+        hostingMethod: "developer_hosted",
+        supportedLanguages: ["English"],
+        useCases: [],
+        limitations: "See the developer documentation for model limitations.",
+        inputSchema: (ioSchema.input as Record<string, unknown> | undefined) ?? ioSchema,
+        outputSchema: (ioSchema.output as Record<string, unknown> | undefined) ?? {},
+        sampleInputs: [],
+        pricingModel,
+        priceDisplay: retailDisplay,
+        unitLabel: pricingModel === "per_token" ? "per 1K tokens" : "per inference",
+        avgLatencyMs: product.avg_latency_ms ?? 900,
+        status: "Published",
+        inputType: validInputType as MarketplaceModel["inputType"],
+        plans: product.pricing_plans?.filter((pricingPlan) => {
+          const pricingModel = String(pricingPlan.pricing_model ?? "").toLowerCase();
+          const name = String(pricingPlan.name ?? "");
+          return pricingModel !== "free" && !/free|trial/i.test(name);
+        }).map((pricingPlan) => ({
+          name: String(pricingPlan.name ?? "Developer plan"),
+          description: String(pricingPlan.description ?? "Developer-defined model pricing."),
+          price: retailDisplay,
+        })),
       };
     });
+}
+
+function normalizeLocalMarketplaceModels(): MarketplaceModel[] {
+  const categories: ModelCategory[] = [
+    "Text generation & LLMs",
+    "Image generation & editing",
+    "Video generation & editing",
+    "Speech recognition",
+    "Text-to-speech",
+    "Document processing",
+    "Image recognition",
+    "Data analysis",
+    "Industry-specific AI",
+  ];
+  const pricingModels: PricingModel[] = [
+    "per_token", "per_inference", "per_image", "per_video_minute",
+    "per_audio_minute", "subscription", "credit_package",
+  ];
+  return readMarketplaceStore().products.flatMap((product) => {
+    if (product.productType !== "model" || product.payload.status !== "Published" || !product.agreementSigned) return [];
+    const payload = product.payload;
+    const category = categories.includes(payload.formA.category as ModelCategory)
+      ? payload.formA.category as ModelCategory
+      : "Text generation & LLMs";
+    const rawInputType = payload.formC.inputType;
+    const inputType: MarketplaceModel["inputType"] = rawInputType === "audio"
+      ? "Audio"
+      : rawInputType === "image"
+        ? "Image"
+        : rawInputType === "video"
+          ? "Video"
+          : rawInputType === "document"
+            ? "Document"
+            : "Text";
+    let inputSchema: Record<string, unknown> = {};
+    if (payload.formC.schemaJson) {
+      try {
+        inputSchema = JSON.parse(payload.formC.schemaJson) as Record<string, unknown>;
+      } catch {
+        inputSchema = {};
+      }
+    }
+    const billing = payload.formE.billingUnit as PricingModel;
+    const pricingModel = pricingModels.includes(billing) ? billing : "per_inference";
+    return [{
+      id: product.marketplaceProductId ?? product.id,
+      slug: product.slug,
+      name: payload.formA.modelName,
+      tagline: payload.formA.shortDescription,
+      description: payload.formA.detailedDescription,
+      providerType: "third_party",
+      developerName: product.developerName,
+      developerVerified: true,
+      supportContact: "Developer support via CODOS",
+      category,
+      version: payload.formA.version || "1.0",
+      architecture: payload.formA.architecture || "Developer-hosted model",
+      framework: payload.formA.framework || "Developer-provided",
+      baseModel: payload.formA.baseModel || "Developer-provided",
+      license: payload.formF.baseModelLicense || "Developer license",
+      hostingMethod: "developer_hosted",
+      supportedLanguages: payload.formA.supportedLanguages || ["English"],
+      useCases: payload.formA.useCases || [],
+      limitations: payload.formD.knownLimitations || "See the developer documentation for model limitations.",
+      inputSchema,
+      outputSchema: {},
+      sampleInputs: payload.formD.sampleInputs || [],
+      pricingModel,
+      priceDisplay: `$${product.finalRetailPrice.toFixed(6)}`,
+      unitLabel: billing === "per_token" ? "per 1K tokens" : "per inference",
+      avgLatencyMs: payload.formB.expectedLatencyMs ?? 900,
+      status: "Published",
+      inputType,
+      acceptedFormats: payload.formC.inputFormats,
+      maxFileSizeMb: payload.formC.maxInputSizeMb,
+      plans: [],
+    }];
+  });
 }
 
 export async function getMarketplaceModels(): Promise<MarketplaceModel[]> {
@@ -450,20 +529,27 @@ export async function getMarketplaceModels(): Promise<MarketplaceModel[]> {
     if (!uniqueSkyModels.has(key)) uniqueSkyModels.set(key, model);
   }
 
-  let developerModels: MarketplaceModel[] = [];
+  let databaseModels: MarketplaceModel[] = [];
+  let marketplaceBackendAvailable = false;
   try {
-    const payloads = await developerApi.listModels("dev-123");
-    developerModels = normalizeDeveloperModels(payloads);
+    databaseModels = normalizeMarketplaceModels(await getPublishedMarketplaceProducts());
+    marketplaceBackendAvailable = true;
   } catch {
-    developerModels = [];
+    databaseModels = [];
   }
 
-  return [
+  const combined = [
     ...Array.from(uniqueSkyModels.values(), normalizeSkyBeak),
-    ...developerModels,
     ...representativeModels,
     ...extraRepresentativeModels,
+    ...databaseModels,
+    ...(marketplaceBackendAvailable ? [] : normalizeLocalMarketplaceModels()),
   ];
+  const uniqueModels = new Map<string, MarketplaceModel>();
+  for (const model of combined) {
+    uniqueModels.set(model.slug, model);
+  }
+  return Array.from(uniqueModels.values());
 }
 
 export async function getMarketplaceModelBySlug(slug: string): Promise<MarketplaceModel | null> {

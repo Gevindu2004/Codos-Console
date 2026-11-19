@@ -17,7 +17,7 @@ export default function ApiPricingPlans({ api, onSubscribe }: Props) {
         <h2 className="text-lg font-bold">Plans for {api.name}</h2>
         <p className="mt-1 text-xs text-[#CBD5E1]">Choose a tier; you can adjust it as usage changes.</p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {api.pricingPlans.map((plan) => (
           <article key={plan.id} className={`glass-panel rounded-2xl p-4 flex flex-col ${activePlan === plan.id ? "border-[#14B8A6]/60" : ""}`}>
             <div className="flex items-center justify-between"><h3 className="text-sm font-bold">{plan.name}</h3>{plan.id === "pro-monthly" && <Sparkles className="w-4 h-4 text-[#14B8A6]" />}</div>

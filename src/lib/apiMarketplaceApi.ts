@@ -1,4 +1,9 @@
-import { developerApi } from "./developerApi";
+import {
+  apiV1BaseUrl,
+  getPublishedMarketplaceProducts,
+  type MarketplaceProductRecord,
+} from "./developerApi";
+import { readMarketplaceStore } from "./marketplaceStore";
 import type { ApiSubmissionFormD } from "@/components/developer/types";
 import type {
   ApiAuthMethod,
@@ -10,16 +15,6 @@ import type {
 } from "@/components/api-marketplace/types";
 
 const plans = (price: string, rpm: number, limit: number): ApiPricingPlan[] => [
-  {
-    id: "free",
-    name: "Free / Trial",
-    pricingModel: "free",
-    priceDisplay: "Free",
-    monthlyRequestLimit: Math.min(limit, 1000),
-    rateLimitRpm: Math.min(rpm, 60),
-    overageRate: "Not available",
-    description: "Evaluate the API with a small monthly request allowance.",
-  },
   {
     id: "pay-per-request",
     name: "Pay-per-Request",
@@ -256,7 +251,7 @@ function categoryFromSubmission(category: string): ApiCategory {
   return "Developer Tools";
 }
 
-function parseOpenApiSpec(raw: string, baseUrl: string): ApiEndpointSpec[] {
+function parseOpenApiSpec(raw: string): ApiEndpointSpec[] {
   try {
     const spec = JSON.parse(raw) as {
       paths?: Record<string, Record<string, {
@@ -270,7 +265,7 @@ function parseOpenApiSpec(raw: string, baseUrl: string): ApiEndpointSpec[] {
     const result: ApiEndpointSpec[] = [];
     for (const [path, methods] of Object.entries(spec.paths ?? {})) {
       for (const [method, operation] of Object.entries(methods)) {
-        if (!["get", "post", "put", "delete"].includes(method.toLowerCase())) continue;
+        if (!["get", "post", "put", "patch", "delete"].includes(method.toLowerCase())) continue;
         const success = operation.responses?.["200"] ?? operation.responses?.["201"];
         result.push({
           id: `${method}-${path}`,
@@ -299,51 +294,133 @@ function parseOpenApiSpec(raw: string, baseUrl: string): ApiEndpointSpec[] {
   } catch {
     // Phase 2 accepts YAML as well; show a useful generic operation when it cannot be parsed here.
   }
-  return [endpoint("api-request", "POST", new URL(baseUrl).pathname, "Send a request to this published API.", { type: "object", properties: { input: { type: "object" } } }, { input: {} }, { status: "accepted" })];
+  return [endpoint("api-request", "POST", "/", "Send a request to this published API.", { type: "object", properties: { input: { type: "object" } } }, { input: {} }, { status: "accepted" })];
 }
 
-function normalizeDeveloperApis(payloads: Awaited<ReturnType<typeof developerApi.listApis>>): MarketplaceApi[] {
-  return payloads
-    .filter((payload) => payload.status === "Published" || payload.status === "Approved")
-    .map((payload, index) => {
-      const baseUrl = payload.formB.baseUrl || "https://api.example.dev";
-      const price = payload.formE.pricePerRequest ?? 0;
-      const pricingPlans: ApiPricingPlan[] = plans(`$${price.toFixed(4)} / request`, payload.formE.rpm ?? 60, payload.formE.monthlyLimit ?? 10000);
-      if (payload.formE.pricingModel.includes("free")) {
-        pricingPlans[0] = { ...pricingPlans[0], priceDisplay: "Free", monthlyRequestLimit: payload.formE.freeTrialAllowance ?? 1000 };
-      }
-      return {
-        id: `developer-api-${index}`,
-        slug: payload.formA.productName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
+function marketplacePricingPlans(product: MarketplaceProductRecord): ApiPricingPlan[] {
+  const planUnit = product.pricing_model.includes("month") || product.pricing_model === "subscription"
+    ? "month"
+    : product.pricing_model === "per_token"
+      ? "1K tokens"
+      : product.pricing_model === "per_image"
+        ? "image"
+        : "request";
+  const retailPrice = `$${product.final_retail_price.toFixed(6)} / ${planUnit}`;
+  const paidPricingPlans = product.pricing_plans?.filter((plan) => {
+    const pricingModel = String(plan.pricing_model ?? "").toLowerCase();
+    const name = String(plan.name ?? "");
+    return pricingModel !== "free" && !/free|trial/i.test(name);
+  });
+  if (!paidPricingPlans?.length) {
+    return plans(retailPrice, product.rate_limit_rpm, 10000);
+  }
+  const marketplacePlans = paidPricingPlans.map((plan, index) => {
+    const rawModel = String(plan.pricing_model ?? product.pricing_model);
+    const pricingModel: ApiPricingModel = ["pay_per_request", "monthly_subscription", "tiered"].includes(rawModel)
+      ? rawModel as ApiPricingModel
+      : "pay_per_request";
+    const requestPrice = typeof plan.price_per_request === "number" ? plan.price_per_request : null;
+    return {
+      id: `${product.slug}-plan-${index + 1}`,
+      name: String(plan.name ?? rawModel.replaceAll("_", " ")),
+      pricingModel,
+      priceDisplay: requestPrice === null ? "Custom" : `$${requestPrice} / request`,
+      monthlyRequestLimit: typeof plan.monthly_limit === "number" ? plan.monthly_limit : null,
+      rateLimitRpm: product.rate_limit_rpm,
+      overageRate: requestPrice === null ? "Contract rate" : `$${requestPrice} / request`,
+      description: typeof plan.description === "string" ? plan.description : "Developer-defined marketplace plan.",
+    };
+  });
+  return marketplacePlans.map((plan) => ({
+    ...plan,
+    priceDisplay: retailPrice,
+    overageRate: retailPrice,
+  }));
+}
+
+function normalizeLocalMarketplaceApis(): MarketplaceApi[] {
+  return readMarketplaceStore().products.flatMap((product) => {
+      if (product.productType !== "api" || product.payload.status !== "Published" || !product.agreementSigned) return [];
+      const payload = product.payload;
+      return [{
+        id: product.marketplaceProductId ?? product.id,
+        slug: product.slug,
         name: payload.formA.productName,
         tagline: payload.formA.shortDescription,
         description: payload.formA.detailedDescription,
         providerType: "third_party",
-        developerName: payload.formA.developerId || "Verified Developer",
+        developerName: product.developerName,
         developerVerified: true,
-        supportContact: "support@developer.example",
+        supportContact: "Developer support via CODOS",
         category: categoryFromSubmission(payload.formA.category),
-        version: payload.formB.apiVersion || "v1",
-        baseUrl,
+        version: payload.formB.apiVersion || "1.0",
+        baseUrl: `${apiV1BaseUrl}/gateway/${product.slug}`,
         authMethod: normalizeAuth(payload.formD.authMethod),
         uptimeSla: payload.formB.availabilityPct ?? 99.9,
-        avgLatencyMs: payload.formB.timeoutMs ?? 250,
+        avgLatencyMs: product.payload.formB.timeoutMs ?? 250,
         rateLimitRpm: payload.formE.rpm ?? 60,
-        endpoints: parseOpenApiSpec(payload.formC.openApiSpec, baseUrl),
-        pricingPlans,
+        endpoints: parseOpenApiSpec(payload.formC.openApiSpec),
+        pricingPlans: plans(
+          `$${product.finalRetailPrice.toFixed(6)} / request`,
+          payload.formE.rpm ?? 60,
+          payload.formE.monthlyLimit ?? 10000,
+        ),
         status: payload.status,
+      }];
+    });
+}
+
+function normalizeMarketplaceProducts(products: MarketplaceProductRecord[]): MarketplaceApi[] {
+  return products
+    .filter((product) => product.product_type === "api")
+    .map((product) => {
+      const baseUrl = `${apiV1BaseUrl}/gateway/${product.slug}`;
+      const spec = typeof product.openapi_spec === "string"
+        ? product.openapi_spec
+        : JSON.stringify(product.openapi_spec ?? {});
+      return {
+        id: product.id,
+        slug: product.slug,
+        name: product.name,
+        tagline: product.short_description,
+        description: product.detailed_description,
+        providerType: "third_party",
+        developerName: product.developer_id,
+        developerVerified: true,
+        supportContact: "Developer support via CODOS",
+        category: categoryFromSubmission(product.category),
+        version: product.version,
+        baseUrl,
+        authMethod: normalizeAuth(product.auth_method as ApiSubmissionFormD["authMethod"]),
+        uptimeSla: 99.9,
+        avgLatencyMs: product.avg_latency_ms ?? 250,
+        rateLimitRpm: product.rate_limit_rpm,
+        endpoints: parseOpenApiSpec(spec),
+        pricingPlans: marketplacePricingPlans(product),
+        status: product.status,
       };
     });
 }
 
 export async function getMarketplaceApis(): Promise<MarketplaceApi[]> {
-  let developerApis: MarketplaceApi[] = [];
+  let databaseApis: MarketplaceApi[] = [];
+  let marketplaceBackendAvailable = false;
   try {
-    developerApis = normalizeDeveloperApis(await developerApi.listApis("dev-123"));
+    databaseApis = normalizeMarketplaceProducts(await getPublishedMarketplaceProducts());
+    marketplaceBackendAvailable = true;
   } catch {
-    developerApis = [];
+    databaseApis = [];
   }
-  return [...firstPartyApis, ...developerApis, ...representativeApis];
+  const bySlug = new Map<string, MarketplaceApi>();
+  for (const api of [...firstPartyApis, ...representativeApis]) bySlug.set(api.slug, api);
+  for (const api of databaseApis) bySlug.set(api.slug, api);
+  if (!marketplaceBackendAvailable) {
+    for (const api of normalizeLocalMarketplaceApis()) bySlug.set(api.slug, api);
+  }
+  return Array.from(bySlug.values()).map((api) => ({
+    ...api,
+    baseUrl: `${apiV1BaseUrl}/gateway/${api.slug}`,
+  }));
 }
 
 export async function getMarketplaceApiBySlug(slug: string): Promise<MarketplaceApi | null> {
@@ -370,7 +447,6 @@ export const API_AUTH_METHODS: ApiAuthMethod[] = [
 ];
 
 export const API_PRICING_MODELS: ApiPricingModel[] = [
-  "free",
   "pay_per_request",
   "monthly_subscription",
   "tiered",

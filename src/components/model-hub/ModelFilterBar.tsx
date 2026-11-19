@@ -3,7 +3,7 @@
 import { Search } from "lucide-react";
 import type { InputType, ModelCategory, ProviderType } from "./types";
 
-export type PricingFilter = "All" | "Free Tier" | "Pay-as-you-go" | "Subscription";
+export type PricingFilter = "All" | "Pay-as-you-go" | "Subscription";
 export type SortOption = "Featured" | "Lowest Latency" | "Newest";
 
 export const MODEL_CATEGORIES: ModelCategory[] = [
@@ -76,7 +76,6 @@ export default function ModelFilterBar(props: Props) {
         </select>
         <select value={props.pricing} onChange={(event) => props.onPricing(event.target.value as PricingFilter)} className={selectClass}>
           <option className={optionClass}>All</option>
-          <option className={optionClass}>Free Tier</option>
           <option className={optionClass}>Pay-as-you-go</option>
           <option className={optionClass}>Subscription</option>
         </select>

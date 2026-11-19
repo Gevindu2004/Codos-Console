@@ -17,14 +17,13 @@ export type ApiAuthMethod =
   | "None";
 
 export type ApiPricingModel =
-  | "free"
   | "pay_per_request"
   | "monthly_subscription"
   | "tiered";
 
 export interface ApiEndpointSpec {
   id: string;
-  method: "GET" | "POST" | "PUT" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   summary: string;
   parameters: Array<{
@@ -43,7 +42,7 @@ export interface ApiEndpointSpec {
 
 export interface ApiPricingPlan {
   id: string;
-  name: "Free / Trial" | "Pay-per-Request" | "Pro Monthly" | "Enterprise" | string;
+  name: "Pay-per-Request" | "Pro Monthly" | "Enterprise" | string;
   pricingModel: ApiPricingModel;
   priceDisplay: string;
   monthlyRequestLimit: number | null;
