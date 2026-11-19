@@ -51,7 +51,7 @@ const sampleApi: ApiSubmissionPayload = {
   },
   formD: {
     authMethod: "api_key",
-    credentialsMasked: "API***********",
+    upstreamAuthHeader: "X-API-Key",
   },
   formE: {
     pricingModel: ["pay_per_request"],
@@ -98,7 +98,8 @@ const sampleModel: ModelSubmissionPayload = {
     fineTuned: true,
   },
   formB: {
-    hostingMethod: "developer_hosted",
+    authMethod: "api_key",
+    upstreamAuthHeader: "X-API-Key",
     inferenceEndpoint: "https://model.acme.com/v1/predict",
     hostingProvider: "GCP",
     healthCheckPath: "/health",

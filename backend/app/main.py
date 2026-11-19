@@ -3,8 +3,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.skybeak import router as skybeak_router
+from app.api.marketplace import router as marketplace_router
+from app.api.gateway import router as gateway_router
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, init_db
+from app.models.marketplace import GatewayUsageLog, MarketplaceProduct
 from app.services.model_engine import seed_base_models
 
 
@@ -31,6 +34,8 @@ app.add_middleware(
 )
 
 app.include_router(skybeak_router, prefix=settings.API_V1_STR)
+app.include_router(marketplace_router, prefix=settings.API_V1_STR)
+app.include_router(gateway_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/health")

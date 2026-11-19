@@ -6,11 +6,7 @@ import type {
   ProductType,
 } from "@/components/developer/types";
 
-export type {
-  HostingMethod,
-  ProductType,
-  SubmissionStatus,
-} from "@/components/developer/types";
+export type { ProductType, SubmissionStatus } from "@/components/developer/types";
 
 export interface AdminDeveloperApplication extends Pick<
   DeveloperProfile,

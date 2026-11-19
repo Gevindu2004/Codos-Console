@@ -24,7 +24,7 @@ export type ApiPricingModel =
 
 export interface ApiEndpointSpec {
   id: string;
-  method: "GET" | "POST" | "PUT" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   summary: string;
   parameters: Array<{

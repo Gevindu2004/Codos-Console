@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Check, ChevronDown, ChevronRight, Copy, Play } from "lucide-react";
 import type { ApiEndpointSpec, MarketplaceApi } from "./types";
+import { apiV1BaseUrl } from "@/lib/developerApi";
 
 interface Props {
   api: MarketplaceApi;
@@ -12,6 +13,7 @@ const methodStyles: Record<ApiEndpointSpec["method"], string> = {
   GET: "bg-sky-400/15 text-sky-300 border-sky-400/25",
   POST: "bg-emerald-400/15 text-emerald-300 border-emerald-400/25",
   PUT: "bg-amber-400/15 text-amber-300 border-amber-400/25",
+  PATCH: "bg-violet-400/15 text-violet-300 border-violet-400/25",
   DELETE: "bg-rose-400/15 text-rose-300 border-rose-400/25",
 };
 
@@ -22,6 +24,8 @@ export default function ApiDocsViewer({ api }: Props) {
   const [response, setResponse] = useState("");
   const [statusCode, setStatusCode] = useState<number | null>(null);
   const [latency, setLatency] = useState<number | null>(null);
+  const [customerApiKey, setCustomerApiKey] = useState("");
+  const [sandboxMode, setSandboxMode] = useState("");
   const [running, setRunning] = useState(false);
   const [codeLang, setCodeLang] = useState<"cURL" | "Python" | "TypeScript">("cURL");
   const [copied, setCopied] = useState(false);
@@ -35,11 +39,12 @@ export default function ApiDocsViewer({ api }: Props) {
 
   if (!selected) return <div className="glass-panel rounded-2xl p-6 text-sm text-[#CBD5E1]">No endpoints are published for this API.</div>;
 
-  const requestUrl = `${api.baseUrl.replace(/\/$/, "")}${selected.path.replace(/\{([^}]+)\}/g, ":$1")}`;
+  const examplePath = selected.path.replace(/\{([^}]+)\}/g, "example-$1");
+  const requestUrl = `${apiV1BaseUrl}/gateway/${api.slug}${examplePath.startsWith("/") ? examplePath : `/${examplePath}`}`;
   const snippets = {
-    "cURL": `curl -X ${selected.method} '${requestUrl}' \\\n  -H 'Authorization: Bearer $CODOS_API_KEY' \\\n  -H 'Content-Type: application/json'${selected.requestBodySchema ? ` \\\n  -d '${JSON.stringify(selected.exampleRequest ?? {})}'` : ""}`,
-    Python: `import requests\n\nresponse = requests.${selected.method.toLowerCase()}(\n    '${requestUrl}',\n    headers={'Authorization': 'Bearer $CODOS_API_KEY'},${selected.requestBodySchema ? `\n    json=${JSON.stringify(selected.exampleRequest ?? {})},` : ""}\n)\nprint(response.json())`,
-    TypeScript: `const response = await fetch('${requestUrl}', {\n  method: '${selected.method}',\n  headers: { Authorization: 'Bearer $CODOS_API_KEY', 'Content-Type': 'application/json' },${selected.requestBodySchema ? `\n  body: JSON.stringify(${JSON.stringify(selected.exampleRequest ?? {})})` : ""}\n});\nconsole.log(await response.json());`,
+    "cURL": `curl -X ${selected.method} '${requestUrl}' \\\n  -H 'X-CODOS-API-Key: $CODOS_API_KEY' \\\n  -H 'Content-Type: application/json'${selected.requestBodySchema ? ` \\\n  -d '${JSON.stringify(selected.exampleRequest ?? {})}'` : ""}`,
+    Python: `import os\nimport requests\n\nresponse = requests.${selected.method.toLowerCase()}(\n    '${requestUrl}',\n    headers={'X-CODOS-API-Key': os.environ['CODOS_API_KEY']},${selected.requestBodySchema ? `\n    json=${JSON.stringify(selected.exampleRequest ?? {})},` : ""}\n)\nprint(response.json())`,
+    TypeScript: `const CODOS_API_KEY = 'YOUR_CODOS_API_KEY';\nconst response = await fetch('${requestUrl}', {\n  method: '${selected.method}',\n  headers: { 'X-CODOS-API-Key': CODOS_API_KEY, 'Content-Type': 'application/json' },${selected.requestBodySchema ? `\n  body: JSON.stringify(${JSON.stringify(selected.exampleRequest ?? {})})` : ""}\n});\nconsole.log(await response.json());`,
   };
 
   const selectEndpoint = (item: ApiEndpointSpec) => {
@@ -48,9 +53,10 @@ export default function ApiDocsViewer({ api }: Props) {
     setResponse("");
     setStatusCode(null);
     setLatency(null);
+    setSandboxMode("");
   };
 
-  const tryEndpoint = () => {
+  const tryEndpoint = async () => {
     let parsedPayload: unknown = {};
     try {
       parsedPayload = payload.trim() ? JSON.parse(payload) : {};
@@ -61,7 +67,36 @@ export default function ApiDocsViewer({ api }: Props) {
     }
     setRunning(true);
     setResponse("");
-    window.setTimeout(() => {
+    setSandboxMode("");
+    const started = performance.now();
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const requestOptions: RequestInit = {
+        method: selected.method,
+        headers: {
+          ...(customerApiKey ? { "X-CODOS-API-Key": customerApiKey } : {}),
+          Accept: "application/json",
+          ...(selected.requestBodySchema ? { "Content-Type": "application/json" } : {}),
+        },
+        signal: controller.signal,
+      };
+      if (selected.requestBodySchema && selected.method !== "GET") {
+        requestOptions.body = JSON.stringify(parsedPayload);
+      }
+      const result = await fetch(requestUrl, requestOptions);
+      const body = await result.text();
+      let output: unknown = body;
+      try {
+        output = body ? JSON.parse(body) : {};
+      } catch {
+        output = body;
+      }
+      setLatency(Math.round(performance.now() - started));
+      setStatusCode(result.status);
+      setResponse(typeof output === "string" ? output : JSON.stringify(output, null, 2));
+      setSandboxMode("Live request via CODOS Gateway");
+    } catch {
       const elapsed = Math.max(12, api.avgLatencyMs + Math.round(Math.random() * 45));
       setLatency(elapsed);
       setStatusCode(200);
@@ -74,8 +109,11 @@ export default function ApiDocsViewer({ api }: Props) {
           request: parsedPayload,
         },
       }, null, 2));
+      setSandboxMode("Simulated response · CODOS Gateway offline");
+    } finally {
+      window.clearTimeout(timeoutId);
       setRunning(false);
-    }, 650);
+    }
   };
 
   const copyCode = async () => {
@@ -115,7 +153,7 @@ export default function ApiDocsViewer({ api }: Props) {
             <code className="text-xs break-all">{selected.path}</code>
           </div>
           <h2 className="mt-3 text-base font-bold">{selected.summary}</h2>
-          <p className="mt-1 text-xs text-[#CBD5E1]">{api.baseUrl}</p>
+          <p className="mt-1 text-xs text-[#CBD5E1]">{`${apiV1BaseUrl}/gateway/${api.slug}`}</p>
           {selected.parameters.length > 0 && (
             <div className="mt-5">
               <h3 className="text-xs font-bold mb-2">Parameters</h3>
@@ -134,7 +172,10 @@ export default function ApiDocsViewer({ api }: Props) {
           <JsonPanel title="Response Schema" value={selected.responseSchema} />
         </div>
         <section className="glass-panel rounded-2xl p-5 space-y-3">
-          <div className="flex items-center justify-between"><h3 className="text-sm font-bold">Try Endpoint</h3><span className="text-[10px] text-[#CBD5E1]">Sandbox simulation · no live request sent</span></div>
+          <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-bold">Try Endpoint</h3><span className="text-[10px] text-[#CBD5E1]">{sandboxMode || "Requests use the CODOS API Gateway when available."}</span></div>
+          <label className="block text-xs text-[#CBD5E1]">CODOS API key
+            <input type="password" autoComplete="new-password" value={customerApiKey} onChange={(event) => setCustomerApiKey(event.target.value)} placeholder="Enter your customer API key" className="mt-2 w-full rounded-lg bg-[#090D16] border border-[#F1F5F9]/10 px-3 py-2 text-xs outline-none focus:border-[#14B8A6]" />
+          </label>
           {selected.requestBodySchema && <label className="block text-xs text-[#CBD5E1]">Request body
             <textarea value={payload} onChange={(event) => setPayload(event.target.value)} className="mt-2 w-full min-h-32 rounded-xl bg-[#090D16] border border-[#F1F5F9]/10 p-3 font-mono text-[11px] outline-none focus:border-[#14B8A6]" />
           </label>}

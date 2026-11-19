@@ -12,14 +12,8 @@ import {
   getPrimarySubmissionAction,
 } from "@/components/developer/submissionActions";
 
-const mockAuditEntries = [
-  { timestamp: "2026-11-15 11:30", actor: "CODOS System", action: "Sandbox validation initiated." },
-  { timestamp: "2026-11-14 14:00", actor: "developer", action: "Submitted for review." },
-  { timestamp: "2026-11-13 20:12", actor: "developer", action: "Saved as draft." },
-];
-
 export default function MyModels() {
-  const { modelSubmissions } = useDeveloper();
+  const { modelProducts, modelSubmissions } = useDeveloper();
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditTarget, setAuditTarget] = useState<string>("");
   const [actionError, setActionError] = useState("");
@@ -35,7 +29,7 @@ export default function MyModels() {
       <div>
         <h1 className="text-2xl font-bold text-[#F1F5F9]">My AI Models</h1>
         <p className="text-sm text-[#CBD5E1] mt-1">
-          All submitted AI model products across hosting modes and categories.
+          All submitted AI model products across your categories.
         </p>
       </div>
 
@@ -67,25 +61,18 @@ export default function MyModels() {
               modelSubmissions.map((model: ModelSubmissionPayload, idx: number) => {
                 const action = getPrimarySubmissionAction(model.status);
                 const draftId = createSubmissionDraftId("model", idx);
+                const product = modelProducts[idx];
                 return (
                 <tr
-                  key={idx}
+                  key={product?.id ?? idx}
                   className="border-b border-[#F1F5F9]/5 hover:bg-[#F1F5F9]/5 transition-colors"
                 >
                   <td className="px-4 py-3 text-[#F1F5F9] font-medium">{model.formA.modelName}</td>
                   <td className="px-4 py-3 text-[#CBD5E1]">{model.formA.category}</td>
                   <td className="px-4 py-3 text-[#CBD5E1]">{model.formA.version}</td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                        model.formB.hostingMethod === "codos_hosted"
-                          ? "bg-[#14B8A6]/10 text-[#14B8A6]"
-                          : "bg-[#F1F5F9]/10 text-[#CBD5E1]"
-                      }`}
-                    >
-                      {model.formB.hostingMethod === "codos_hosted"
-                        ? "CODOS-Hosted"
-                        : "Developer-Hosted"}
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#F1F5F9]/10 text-[#CBD5E1]">
+                      Developer-Hosted
                     </span>
                   </td>
                   <td className="px-4 py-3 text-[#CBD5E1]">{model.formA.framework}</td>
@@ -111,7 +98,7 @@ export default function MyModels() {
                         {action.label}
                       </Link>
                       <button
-                        onClick={() => openAudit(model.formA.modelName)}
+                        onClick={() => openAudit(product?.id ?? model.formA.modelName)}
                         className="flex items-center gap-1 text-[#CBD5E1] hover:text-[#F1F5F9] cursor-pointer"
                       >
                         <Eye className="w-3 h-3" /> Audit
@@ -147,10 +134,18 @@ export default function MyModels() {
       <AuditHistoryModal
         open={auditOpen}
         onClose={() => setAuditOpen(false)}
-        entries={mockAuditEntries.map((e) => ({
-          ...e,
-          details: { model: auditTarget },
-        }))}
+        entries={(() => {
+          const product = modelProducts.find((entry) => entry.id === auditTarget);
+          if (!product) return [];
+          const currentReview = {
+            timestamp: product.updatedAt,
+            actor: "CODOS Admin",
+            action: `Current status: ${product.payload.status}`,
+            details: { status: product.payload.status, reviewNotes: product.reviewNotes || "No review notes." },
+          };
+          return [currentReview, ...product.auditLogs]
+            .sort((left, right) => right.timestamp.localeCompare(left.timestamp));
+        })()}
       />
     </div>
   );
