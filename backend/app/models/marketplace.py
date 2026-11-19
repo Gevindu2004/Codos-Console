@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, Index, Integer, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -11,12 +11,38 @@ def generate_uuid() -> str:
     return str(uuid.uuid4())
 
 
+class Developer(Base):
+    __tablename__ = "developers"
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True, default=generate_uuid)
+    developer_name: Mapped[str] = mapped_column(String(180), nullable=False)
+    company_name: Mapped[str] = mapped_column(String(180), default="", nullable=False)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    country: Mapped[str] = mapped_column(String(120), nullable=False)
+    website: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    support_contact: Mapped[str] = mapped_column(String(320), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="pending", index=True, nullable=False)
+    review_notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    audit_logs: Mapped[list | None] = mapped_column(JSON, default=list, nullable=True)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
 class MarketplaceProduct(Base):
     __tablename__ = "marketplace_products"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
     slug: Mapped[str] = mapped_column(String(180), unique=True, index=True, nullable=False)
-    developer_id: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
+    developer_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("developers.id", ondelete="RESTRICT"),
+        index=True,
+        nullable=False,
+    )
     provider_type: Mapped[str] = mapped_column(String(32), default="third_party", nullable=False)
     product_type: Mapped[str] = mapped_column(String(16), nullable=False)
     name: Mapped[str] = mapped_column(String(180), nullable=False)

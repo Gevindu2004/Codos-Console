@@ -200,6 +200,80 @@ CREATE TABLE public.usage_logs (
 
 
 --
+-- Name: developers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.developers (
+    id character varying(128) NOT NULL,
+    developer_name character varying(180) NOT NULL,
+    company_name character varying(180) NOT NULL,
+    email character varying(320) NOT NULL,
+    email_verified boolean NOT NULL,
+    country character varying(120) NOT NULL,
+    website character varying(2048),
+    support_contact character varying(320) NOT NULL,
+    status character varying(32) NOT NULL,
+    review_notes text NOT NULL,
+    audit_logs json,
+    submitted_at timestamp without time zone NOT NULL,
+    created_at timestamp without time zone NOT NULL,
+    updated_at timestamp without time zone NOT NULL
+);
+
+
+--
+-- Name: gateway_usage_logs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.gateway_usage_logs (
+    id character varying(36) NOT NULL,
+    product_id character varying(36) NOT NULL,
+    developer_id character varying(128) NOT NULL,
+    customer_key_id character varying(36) NOT NULL,
+    endpoint character varying(2048) NOT NULL,
+    method character varying(10) NOT NULL,
+    status_code integer NOT NULL,
+    latency_ms integer NOT NULL,
+    created_at timestamp without time zone NOT NULL
+);
+
+
+--
+-- Name: marketplace_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.marketplace_products (
+    id character varying(36) NOT NULL,
+    slug character varying(180) NOT NULL,
+    developer_id character varying(128) NOT NULL,
+    provider_type character varying(32) NOT NULL,
+    product_type character varying(16) NOT NULL,
+    name character varying(180) NOT NULL,
+    version character varying(80) NOT NULL,
+    category character varying(120) NOT NULL,
+    short_description character varying(500) NOT NULL,
+    detailed_description text NOT NULL,
+    logo_url character varying(2048),
+    base_url character varying(2048) NOT NULL,
+    health_check_url character varying(2048),
+    auth_method character varying(32) NOT NULL,
+    upstream_auth_header character varying(128),
+    upstream_api_key text,
+    openapi_spec json,
+    io_schema json,
+    pricing_model character varying(64) NOT NULL,
+    pricing_plans json,
+    rate_limit_rpm integer NOT NULL,
+    avg_latency_ms double precision,
+    status character varying(32) NOT NULL,
+    review_notes text NOT NULL,
+    audit_logs json,
+    created_at timestamp without time zone NOT NULL,
+    updated_at timestamp without time zone NOT NULL
+);
+
+
+--
 -- Name: api_keys api_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -269,6 +343,30 @@ ALTER TABLE ONLY public.processing_jobs
 
 ALTER TABLE ONLY public.usage_logs
     ADD CONSTRAINT usage_logs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: developers developers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.developers
+    ADD CONSTRAINT developers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: gateway_usage_logs gateway_usage_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.gateway_usage_logs
+    ADD CONSTRAINT gateway_usage_logs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: marketplace_products marketplace_products_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.marketplace_products
+    ADD CONSTRAINT marketplace_products_pkey PRIMARY KEY (id);
 
 
 --
@@ -391,6 +489,69 @@ CREATE INDEX ix_usage_logs_user_id ON public.usage_logs USING btree (user_id);
 
 
 --
+-- Name: ix_developers_email; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_developers_email ON public.developers USING btree (email);
+
+
+--
+-- Name: ix_developers_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_developers_status ON public.developers USING btree (status);
+
+
+--
+-- Name: ix_gateway_usage_logs_customer_key_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_gateway_usage_logs_customer_key_id ON public.gateway_usage_logs USING btree (customer_key_id);
+
+
+--
+-- Name: ix_gateway_usage_logs_developer_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_gateway_usage_logs_developer_id ON public.gateway_usage_logs USING btree (developer_id);
+
+
+--
+-- Name: ix_gateway_usage_logs_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_gateway_usage_logs_product_id ON public.gateway_usage_logs USING btree (product_id);
+
+
+--
+-- Name: ix_gateway_usage_product_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_gateway_usage_product_created ON public.gateway_usage_logs USING btree (product_id, created_at);
+
+
+--
+-- Name: ix_marketplace_products_developer_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_marketplace_products_developer_id ON public.marketplace_products USING btree (developer_id);
+
+
+--
+-- Name: ix_marketplace_products_slug; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_marketplace_products_slug ON public.marketplace_products USING btree (slug);
+
+
+--
+-- Name: ix_marketplace_products_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_marketplace_products_status ON public.marketplace_products USING btree (status);
+
+
+--
 -- Name: api_keys api_keys_configured_model_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -444,6 +605,14 @@ ALTER TABLE ONLY public.knowledge_sources
 
 ALTER TABLE ONLY public.processing_jobs
     ADD CONSTRAINT processing_jobs_configured_model_id_fkey FOREIGN KEY (configured_model_id) REFERENCES public.configured_models(id) ON DELETE CASCADE;
+
+
+--
+-- Name: marketplace_products marketplace_products_developer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.marketplace_products
+    ADD CONSTRAINT marketplace_products_developer_id_fkey FOREIGN KEY (developer_id) REFERENCES public.developers(id) ON DELETE RESTRICT;
 
 
 --

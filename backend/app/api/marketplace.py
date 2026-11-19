@@ -1,5 +1,6 @@
 import re
 import secrets
+from datetime import datetime
 from typing import Annotated
 from urllib.parse import urlsplit
 
@@ -12,8 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import encrypt_secret
-from app.models.marketplace import MarketplaceProduct
+from app.models.marketplace import Developer, MarketplaceProduct, generate_uuid
 from app.schemas.marketplace import (
+    MarketplaceDeveloperCreate,
+    MarketplaceDeveloperRead,
+    MarketplaceDeveloperStatusUpdate,
     MarketplaceProductCreate,
     MarketplaceProductRead,
     MarketplaceProductStatusUpdate,
@@ -54,6 +58,104 @@ def validate_upstream_url(value: str, label: str) -> None:
         )
 
 
+def require_admin_token(configured_token: str | None, supplied_token: str | None) -> None:
+    if not configured_token:
+        raise HTTPException(status_code=503, detail="Marketplace admin access is not configured.")
+    if not supplied_token or not secrets.compare_digest(supplied_token, configured_token):
+        raise HTTPException(status_code=403, detail="Admin authorization is required.")
+
+
+@router.post(
+    "/developers",
+    response_model=MarketplaceDeveloperRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upsert_developer(
+    payload: MarketplaceDeveloperCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    email = payload.email.strip().lower()
+    developer = await db.scalar(select(Developer).where(Developer.email == email))
+    if developer is None and payload.id:
+        developer = await db.get(Developer, payload.id)
+        if developer and developer.email != email:
+            raise HTTPException(status_code=409, detail="Developer ID is already associated with another email.")
+    now = datetime.utcnow()
+    if developer is None:
+        developer = Developer(
+            id=payload.id or generate_uuid(),
+            **payload.model_dump(exclude={"id", "email", "website"}, mode="json"),
+            email=email,
+            website=str(payload.website) if payload.website else None,
+            status="pending",
+            review_notes="",
+            audit_logs=[{
+                "timestamp": now.isoformat(),
+                "actor": "developer",
+                "action": "Registration submitted",
+            }],
+            submitted_at=now,
+        )
+        db.add(developer)
+    else:
+        developer.developer_name = payload.developer_name
+        developer.company_name = payload.company_name
+        developer.email = email
+        developer.email_verified = payload.email_verified
+        developer.country = payload.country
+        developer.website = str(payload.website) if payload.website else None
+        developer.support_contact = payload.support_contact
+        developer.status = "pending"
+        developer.review_notes = ""
+        developer.audit_logs = [
+            *(developer.audit_logs or []),
+            {
+                "timestamp": now.isoformat(),
+                "actor": "developer",
+                "action": "Registration resubmitted",
+            },
+        ]
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="A developer with this email already exists.") from exc
+    await db.refresh(developer)
+    return developer
+
+
+@router.get("/developers/admin", response_model=list[MarketplaceDeveloperRead])
+async def list_developers_for_admin(
+    db: AsyncSession = Depends(get_db),
+    x_admin_token: Annotated[str | None, Header(alias="X-Admin-Token")] = None,
+):
+    require_admin_token(settings.MARKETPLACE_ADMIN_TOKEN, x_admin_token)
+    result = await db.execute(select(Developer).order_by(Developer.submitted_at.desc()))
+    return result.scalars().all()
+
+
+@router.patch(
+    "/developers/{developer_id}/status",
+    response_model=MarketplaceDeveloperRead,
+)
+async def update_developer_status(
+    developer_id: str,
+    payload: MarketplaceDeveloperStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    x_admin_token: Annotated[str | None, Header(alias="X-Admin-Token")] = None,
+):
+    require_admin_token(settings.MARKETPLACE_ADMIN_TOKEN, x_admin_token)
+    developer = await db.get(Developer, developer_id)
+    if developer is None:
+        raise HTTPException(status_code=404, detail="Developer not found.")
+    developer.status = payload.status
+    developer.review_notes = payload.review_notes
+    developer.audit_logs = payload.audit_logs
+    await db.commit()
+    await db.refresh(developer)
+    return developer
+
+
 @router.post("/products", response_model=MarketplaceProductRead, status_code=status.HTTP_201_CREATED)
 async def create_product(
     payload: MarketplaceProductCreate,
@@ -64,6 +166,8 @@ async def create_product(
         raise HTTPException(status_code=422, detail="Unsupported upstream authentication method.")
     if auth_method != "none" and not payload.upstream_api_key:
         raise HTTPException(status_code=422, detail="An upstream credential is required for this authentication method.")
+    if await db.get(Developer, payload.developer_id) is None:
+        raise HTTPException(status_code=404, detail="The submitted developer profile was not found.")
     validate_upstream_url(str(payload.base_url), "upstream endpoint")
     if payload.health_check_url:
         validate_upstream_url(str(payload.health_check_url), "health check URL")
@@ -113,11 +217,7 @@ async def list_all_products_for_admin(
     db: AsyncSession = Depends(get_db),
     x_admin_token: Annotated[str | None, Header(alias="X-Admin-Token")] = None,
 ):
-    configured_token = settings.MARKETPLACE_ADMIN_TOKEN
-    if not configured_token:
-        raise HTTPException(status_code=503, detail="Marketplace admin access is not configured.")
-    if not x_admin_token or not secrets.compare_digest(x_admin_token, configured_token):
-        raise HTTPException(status_code=403, detail="Admin authorization is required.")
+    require_admin_token(settings.MARKETPLACE_ADMIN_TOKEN, x_admin_token)
     result = await db.execute(select(MarketplaceProduct).order_by(MarketplaceProduct.created_at.desc()))
     return result.scalars().all()
 
@@ -143,11 +243,7 @@ async def update_product_status(
     db: AsyncSession = Depends(get_db),
     x_admin_token: Annotated[str | None, Header(alias="X-Admin-Token")] = None,
 ):
-    configured_token = settings.MARKETPLACE_ADMIN_TOKEN
-    if not configured_token:
-        raise HTTPException(status_code=503, detail="Marketplace admin status updates are not configured.")
-    if not x_admin_token or not secrets.compare_digest(x_admin_token, configured_token):
-        raise HTTPException(status_code=403, detail="Admin authorization is required.")
+    require_admin_token(settings.MARKETPLACE_ADMIN_TOKEN, x_admin_token)
 
     product = await db.get(MarketplaceProduct, product_id)
     if product is None:

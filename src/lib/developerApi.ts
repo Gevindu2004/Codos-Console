@@ -53,6 +53,23 @@ export interface MarketplaceProductRecord {
   updated_at: string;
 }
 
+export interface MarketplaceDeveloperRecord {
+  id: string;
+  developer_name: string;
+  company_name: string;
+  email: string;
+  email_verified: boolean;
+  country: string;
+  website: string | null;
+  support_contact: string;
+  status: "pending" | "approved" | "rejected" | "suspended";
+  review_notes: string;
+  audit_logs: Array<{ timestamp: string; actor: string; action: string; details?: Record<string, unknown> }> | null;
+  submitted_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
 type MarketplaceProductSubmission = {
   developer_id: string;
   provider_type: "third_party";
@@ -75,6 +92,71 @@ type MarketplaceProductSubmission = {
   rate_limit_rpm: number;
   avg_latency_ms: number | null;
 };
+
+export async function postMarketplaceDeveloper(
+  profile: DeveloperProfile,
+): Promise<MarketplaceDeveloperRecord | null> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiV1BaseUrl}/marketplace/developers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: profile.id,
+        developer_name: profile.developerName,
+        company_name: profile.companyName ?? "",
+        email: profile.email,
+        email_verified: profile.emailVerified,
+        country: profile.country,
+        website: profile.website || null,
+        support_contact: profile.supportContact,
+      }),
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null) as { detail?: string } | null;
+    throw new Error(detail?.detail || `Developer registration failed (${response.status}).`);
+  }
+  return response.json() as Promise<MarketplaceDeveloperRecord>;
+}
+
+export async function getAdminMarketplaceDevelopers(): Promise<MarketplaceDeveloperRecord[] | null> {
+  const url = `${apiV1BaseUrl}/marketplace/developers/admin`;
+  let adminToken = getMarketplaceAdminToken(false);
+  let response = await fetch(url, {
+    headers: adminToken ? { "X-Admin-Token": adminToken } : {},
+    cache: "no-store",
+  });
+  if (response.status === 403 && !adminToken) {
+    adminToken = getMarketplaceAdminToken(true);
+    if (!adminToken) return null;
+    response = await fetch(url, {
+      headers: { "X-Admin-Token": adminToken },
+      cache: "no-store",
+    });
+  }
+  if (!response.ok) throw new Error(`Marketplace developer request failed (${response.status}).`);
+  return response.json() as Promise<MarketplaceDeveloperRecord[]>;
+}
+
+export async function updateMarketplaceDeveloperStatus(
+  id: string,
+  status: "pending" | "approved" | "rejected" | "suspended",
+  reviewNotes: string,
+  auditLogs: NonNullable<MarketplaceDeveloperRecord["audit_logs"]>,
+): Promise<MarketplaceDeveloperRecord> {
+  const adminToken = getMarketplaceAdminToken(true);
+  if (!adminToken) throw new Error("Marketplace backend developer status was not updated because no admin token was provided.");
+  const response = await fetch(`${apiV1BaseUrl}/marketplace/developers/${encodeURIComponent(id)}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
+    body: JSON.stringify({ status, review_notes: reviewNotes, audit_logs: auditLogs }),
+  });
+  if (!response.ok) throw new Error(`Marketplace developer status update failed (${response.status}).`);
+  return response.json() as Promise<MarketplaceDeveloperRecord>;
+}
 
 function healthCheckUrl(baseUrl: string, healthPath?: string): string | null {
   if (!healthPath?.trim()) return null;
@@ -214,7 +296,7 @@ export async function updateMarketplaceProductStatus(
   return response.json() as Promise<MarketplaceProductRecord>;
 }
 
-export async function getAdminMarketplaceProducts(): Promise<MarketplaceProductRecord[]> {
+export async function getAdminMarketplaceProducts(): Promise<MarketplaceProductRecord[] | null> {
   const url = `${apiV1BaseUrl}/marketplace/products/admin`;
   let adminToken = getMarketplaceAdminToken(false);
   let response = await fetch(url, {
@@ -223,7 +305,7 @@ export async function getAdminMarketplaceProducts(): Promise<MarketplaceProductR
   });
   if (response.status === 403 && !adminToken) {
     adminToken = getMarketplaceAdminToken(true);
-    if (!adminToken) return [];
+    if (!adminToken) return null;
     response = await fetch(url, {
       headers: { "X-Admin-Token": adminToken },
       cache: "no-store",

@@ -7,7 +7,9 @@ import {
   getDeveloperProfile,
   registerDeveloper,
   subscribeMarketplaceStore,
+  syncMarketplaceDeveloperRecord,
 } from "@/lib/marketplaceStore";
+import { postMarketplaceDeveloper } from "@/lib/developerApi";
 import type { DeveloperProfile } from "@/components/developer/types";
 
 type RegistrationForm = {
@@ -54,7 +56,7 @@ export default function DeveloperRegistration() {
     setSubmitted(false);
   };
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextErrors: RegistrationErrors = {};
     if (!form.developerName.trim()) {
@@ -76,8 +78,9 @@ export default function DeveloperRegistration() {
     }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
+    let saved: DeveloperProfile;
     try {
-      const saved = registerDeveloper({
+      saved = registerDeveloper({
         developerName: form.developerName.trim(),
         companyName: form.companyName.trim(),
         email: form.email.trim(),
@@ -86,11 +89,26 @@ export default function DeveloperRegistration() {
         website: form.website.trim() || undefined,
         supportContact: form.supportContact.trim(),
       });
-      setProfile(saved);
-      setSubmitted(true);
     } catch (error) {
       console.error("Could not save developer registration.", error);
       setEmailNotice("Registration could not be saved. Check browser storage and try again.");
+      return;
+    }
+    setProfile(saved);
+    setSubmitted(true);
+    try {
+      const persisted = await postMarketplaceDeveloper(saved);
+      if (persisted) {
+        setProfile(syncMarketplaceDeveloperRecord(persisted, true));
+        setEmailNotice("");
+      } else {
+        setEmailNotice("The backend is offline. Your registration is saved locally and will need to be resubmitted when it is available.");
+      }
+    } catch (error) {
+      console.error("Could not sync developer registration with the backend.", error);
+      setEmailNotice(error instanceof Error
+        ? `Saved locally, but backend sync failed: ${error.message}`
+        : "Saved locally, but backend sync failed.");
     }
   };
 

@@ -18,6 +18,7 @@ import {
 import {
   readMarketplaceStore,
   sharedProductsToAdmin,
+  syncMarketplaceDevelopersFromBackend,
   subscribeMarketplaceStore,
   syncMarketplaceProductsFromBackend,
   updateDeveloperReview,
@@ -122,7 +123,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
     applySharedData();
     const unsubscribe = subscribeMarketplaceStore(applySharedData);
-    void syncMarketplaceProductsFromBackend();
+    void syncMarketplaceDevelopersFromBackend().then(syncMarketplaceProductsFromBackend);
     return unsubscribe;
   }, []);
 

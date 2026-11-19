@@ -393,15 +393,19 @@ function normalizeMarketplaceProducts(products: MarketplaceProductRecord[]): Mar
 
 export async function getMarketplaceApis(): Promise<MarketplaceApi[]> {
   let databaseApis: MarketplaceApi[] = [];
+  let marketplaceBackendAvailable = false;
   try {
     databaseApis = normalizeMarketplaceProducts(await getPublishedMarketplaceProducts());
+    marketplaceBackendAvailable = true;
   } catch {
     databaseApis = [];
   }
   const bySlug = new Map<string, MarketplaceApi>();
   for (const api of [...firstPartyApis, ...representativeApis]) bySlug.set(api.slug, api);
   for (const api of databaseApis) bySlug.set(api.slug, api);
-  for (const api of normalizeLocalMarketplaceApis()) bySlug.set(api.slug, api);
+  if (!marketplaceBackendAvailable) {
+    for (const api of normalizeLocalMarketplaceApis()) bySlug.set(api.slug, api);
+  }
   return Array.from(bySlug.values()).map((api) => ({
     ...api,
     baseUrl: `${apiV1BaseUrl}/gateway/${api.slug}`,

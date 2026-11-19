@@ -13,8 +13,11 @@ import type {
   UpstreamAuthMethod,
 } from "@/components/developer/types";
 import {
+  getAdminMarketplaceDevelopers,
   getAdminMarketplaceProducts,
+  updateMarketplaceDeveloperStatus,
   updateMarketplaceProductStatus,
+  type MarketplaceDeveloperRecord,
   type MarketplaceProductRecord,
 } from "@/lib/developerApi";
 
@@ -23,6 +26,7 @@ const CURRENT_DEVELOPER_KEY = "currentDeveloperId";
 const STORE_EVENT = "codos-marketplace-store-updated";
 
 export type SharedDeveloper = AdminDeveloperApplication & {
+  marketplaceDeveloperId?: string;
   auditLogs: Array<{ timestamp: string; actor: string; action: string; details?: Record<string, unknown> }>;
 };
 
@@ -182,6 +186,92 @@ export function updateDeveloperReview(
     ...state,
     developers: state.developers.map((entry) => entry.id === id ? next : entry),
   });
+  if (next.marketplaceDeveloperId) {
+    void updateMarketplaceDeveloperStatus(
+      next.marketplaceDeveloperId,
+      status,
+      reviewNotes,
+      next.auditLogs,
+    )
+      .catch((error: unknown) => console.error("Could not sync marketplace developer status.", error));
+  }
+}
+
+function mergeMarketplaceDeveloper(
+  state: MarketplaceStoreState,
+  record: MarketplaceDeveloperRecord,
+): MarketplaceStoreState {
+  const email = record.email.trim().toLowerCase();
+  const existing = state.developers.find((entry) =>
+    entry.id === record.id || entry.email.trim().toLowerCase() === email,
+  );
+  const oldId = existing?.id;
+  const developer: SharedDeveloper = {
+    id: record.id,
+    marketplaceDeveloperId: record.id,
+    developerName: record.developer_name,
+    companyName: record.company_name,
+    email: record.email,
+    emailVerified: record.email_verified,
+    country: record.country,
+    website: record.website ?? undefined,
+    supportContact: record.support_contact,
+    status: record.status,
+    reviewNotes: record.review_notes,
+    submittedAt: record.submitted_at,
+    auditLogs: record.audit_logs ?? existing?.auditLogs ?? [],
+  };
+  const developers = [
+    developer,
+    ...state.developers.filter((entry) => entry.id !== oldId && entry.id !== record.id),
+  ];
+  const products = oldId && oldId !== record.id
+    ? state.products.map((product) => {
+        if (product.developerId !== oldId) return product;
+        if (product.productType === "api") {
+          return {
+            ...product,
+            developerId: record.id,
+            payload: { ...product.payload, formA: { ...product.payload.formA, developerId: record.id } },
+          };
+        }
+        return {
+          ...product,
+          developerId: record.id,
+          payload: { ...product.payload, formA: { ...product.payload.formA, developerId: record.id } },
+        };
+      })
+    : state.products;
+  return { developers, products };
+}
+
+export function syncMarketplaceDeveloperRecord(
+  record: MarketplaceDeveloperRecord,
+  makeCurrent = false,
+): DeveloperProfile {
+  const previous = readMarketplaceStore();
+  const match = previous.developers.find((entry) =>
+    entry.id === record.id || entry.email.trim().toLowerCase() === record.email.trim().toLowerCase(),
+  );
+  const next = mergeMarketplaceDeveloper(previous, record);
+  const currentId = getCurrentDeveloperId();
+  if (makeCurrent || (match && currentId === match.id)) {
+    window.localStorage.setItem(CURRENT_DEVELOPER_KEY, record.id);
+  }
+  notifyStore(next);
+  return getDeveloperProfile(record.id)!;
+}
+
+export async function syncMarketplaceDevelopersFromBackend(): Promise<void> {
+  try {
+    const records = await getAdminMarketplaceDevelopers();
+    if (records === null) return;
+    let state: MarketplaceStoreState = { ...readMarketplaceStore(), developers: [] };
+    for (const record of records) state = mergeMarketplaceDeveloper(state, record);
+    notifyStore(state);
+  } catch (error) {
+    console.error("Could not sync marketplace developers from the backend.", error);
+  }
 }
 
 export function getDeveloperProducts(developerId: string): SharedProduct[] {
@@ -358,7 +448,7 @@ function payloadFromMarketplaceRecord(record: MarketplaceProductRecord): ApiSubm
 export async function syncMarketplaceProductsFromBackend(): Promise<void> {
   try {
     const records = await getAdminMarketplaceProducts();
-    if (!records.length) return;
+    if (records === null) return;
     const state = readMarketplaceStore();
     const synced = records.map((record): SharedProduct => {
       const current = state.products.find((product) => product.marketplaceProductId === record.id);
@@ -403,10 +493,9 @@ export async function syncMarketplaceProductsFromBackend(): Promise<void> {
       }
       return { ...common, productType: "model", payload };
     });
-    const syncedIds = new Set(synced.map((product) => product.marketplaceProductId));
     notifyStore({
       ...state,
-      products: [...synced, ...state.products.filter((product) => !syncedIds.has(product.marketplaceProductId))],
+      products: synced,
     });
   } catch (error) {
     console.error("Could not sync marketplace products from the backend.", error);

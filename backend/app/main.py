@@ -7,7 +7,7 @@ from app.api.marketplace import router as marketplace_router
 from app.api.gateway import router as gateway_router
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, init_db
-from app.models.marketplace import GatewayUsageLog, MarketplaceProduct
+from app.models.marketplace import Developer, GatewayUsageLog, MarketplaceProduct
 from app.services.model_engine import seed_base_models
 
 

@@ -4,6 +4,42 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
+class MarketplaceDeveloperCreate(BaseModel):
+    id: str | None = Field(default=None, min_length=1, max_length=128)
+    developer_name: str = Field(min_length=1, max_length=180)
+    company_name: str = Field(default="", max_length=180)
+    email: str = Field(min_length=3, max_length=320, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    email_verified: bool = False
+    country: str = Field(min_length=1, max_length=120)
+    website: HttpUrl | None = None
+    support_contact: str = Field(min_length=1, max_length=320)
+
+
+class MarketplaceDeveloperRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    developer_name: str
+    company_name: str
+    email: str
+    email_verified: bool
+    country: str
+    website: str | None
+    support_contact: str
+    status: str
+    review_notes: str
+    audit_logs: list[dict[str, Any]] | None
+    submitted_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+
+class MarketplaceDeveloperStatusUpdate(BaseModel):
+    status: Literal["pending", "approved", "rejected", "suspended"]
+    review_notes: str = ""
+    audit_logs: list[dict[str, Any]] | None = None
+
+
 class MarketplaceProductCreate(BaseModel):
     slug: str | None = Field(default=None, min_length=1, max_length=180, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     developer_id: str = Field(min_length=1, max_length=128)

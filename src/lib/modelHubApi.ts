@@ -538,8 +538,10 @@ export async function getMarketplaceModels(): Promise<MarketplaceModel[]> {
   }
 
   let databaseModels: MarketplaceModel[] = [];
+  let marketplaceBackendAvailable = false;
   try {
     databaseModels = normalizeMarketplaceModels(await getPublishedMarketplaceProducts());
+    marketplaceBackendAvailable = true;
   } catch {
     databaseModels = [];
   }
@@ -549,7 +551,7 @@ export async function getMarketplaceModels(): Promise<MarketplaceModel[]> {
     ...representativeModels,
     ...extraRepresentativeModels,
     ...databaseModels,
-    ...normalizeLocalMarketplaceModels(),
+    ...(marketplaceBackendAvailable ? [] : normalizeLocalMarketplaceModels()),
   ];
   const uniqueModels = new Map<string, MarketplaceModel>();
   for (const model of combined) {
