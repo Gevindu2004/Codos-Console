@@ -2,6 +2,7 @@
 
 @layer base {
   :root {
+    color-scheme: dark;
     --primary-base: #0F172A;
     --primary-dark: #090D16;
     --primary-card: #1E293B;
@@ -16,6 +17,16 @@
     --midnight-black: #0B0B0C;
     --navy-blue: #14213D;
     --cursor-glare: rgba(20, 184, 166, 0.18);
+  }
+
+  select,
+  option {
+    color-scheme: dark;
+  }
+
+  option {
+    background-color: #0B1120;
+    color: #F1F5F9;
   }
 
   html[data-theme="light"] {
