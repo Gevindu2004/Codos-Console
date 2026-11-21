@@ -43,6 +43,7 @@ import {
   LayoutDashboard,
   Play,
   Square,
+  Search,
 } from "lucide-react";
 import {
   useOnboardingStore,
@@ -55,8 +56,11 @@ import {
   CARRIER_FORWARDING_CODES,
 } from "./industryTemplates";
 import {
+  AvailablePhoneNumber,
   IndustryType,
   KnowledgeFAQ,
+  PhoneCountry,
+  PhoneNumberType,
   PlanTier,
   TelephonySetupType,
 } from "./types";
@@ -73,7 +77,6 @@ import {
 } from "./ui";
 import {
   useVapiWeb,
-  useGoogleAuth,
   api,
   ProvisioningStepResult,
   speakWithPersona,
@@ -1314,10 +1317,9 @@ export const Step6CalendarAndPhone: React.FC = () => {
   const state = useOnboardingStore();
   const { updateUser, login } = useAdminStore();
   const { navigateTo } = useCallColleagueNavigation();
-  const { connectGoogleCalendar, disconnectGoogleCalendar, isConnecting } =
-    useGoogleAuth();
 
   const [isProvisioning, setIsProvisioning] = useState(false);
+  const [provisionError, setProvisionError] = useState<string | null>(null);
   const [showCheckout, setShowCheckout] = useState(false);
   const [otpInput, setOtpInput] = useState("");
   const [isSendingOtp, setIsSendingOtp] = useState(false);
@@ -1325,9 +1327,73 @@ export const Step6CalendarAndPhone: React.FC = () => {
   const [otpError, setOtpError] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
+  const [areaCode, setAreaCode] = useState("");
+  const [numberType, setNumberType] = useState<PhoneNumberType>("local");
+  const [availableNumbers, setAvailableNumbers] = useState<
+    AvailablePhoneNumber[]
+  >([]);
+  const [searchMode, setSearchMode] = useState<"twilio" | "sandbox" | null>(
+    null
+  );
+  const [requiresBundle, setRequiresBundle] = useState(false);
+  const [isSearchingNumbers, setIsSearchingNumbers] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  const [useByoTwilio, setUseByoTwilio] = useState(false);
+  const [byoAccountSid, setByoAccountSid] = useState("");
+  const [byoAuthToken, setByoAuthToken] = useState("");
+  const [byoPhoneNumber, setByoPhoneNumber] = useState("");
+
   const selectedCarrier =
     CARRIER_FORWARDING_CODES.find((c) => c.id === state.selectedCarrierId) ||
     CARRIER_FORWARDING_CODES[0];
+
+  const runNumberSearch = async (
+    targetCountry: PhoneCountry = state.phoneCountry,
+    targetAreaCode: string = areaCode,
+    targetNumberType: PhoneNumberType = numberType
+  ) => {
+    setIsSearchingNumbers(true);
+    setSearchError(null);
+    try {
+      const res = await api.searchAvailableNumbers(
+        targetCountry,
+        targetAreaCode,
+        targetNumberType
+      );
+      setAvailableNumbers(res.numbers || []);
+      setSearchMode(res.mode);
+      setRequiresBundle(Boolean(res.requiresBundle));
+      if (res.error) {
+        setSearchError(res.error);
+      }
+      if (res.numbers && res.numbers.length > 0) {
+        const stillExists = res.numbers.some(
+          (n) => n.phoneNumber === state.selectedPhoneNumber
+        );
+        if (!stillExists) {
+          state.setSelectedPhoneNumber(res.numbers[0].phoneNumber);
+        }
+      }
+    } catch (err) {
+      setSearchError(
+        err instanceof Error ? err.message : "Failed to search phone numbers."
+      );
+    } finally {
+      setIsSearchingNumbers(false);
+    }
+  };
+
+  useEffect(() => {
+    if (
+      (state.telephonySetupType === "new_dedicated_number" ||
+        state.telephonySetupType === "call_forwarding") &&
+      !useByoTwilio
+    ) {
+      void runNumberSearch(state.phoneCountry, areaCode, numberType);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.telephonySetupType, state.phoneCountry, numberType, useByoTwilio]);
 
   const handleSendOtp = async () => {
     if (!state.forwardingNumber.trim()) return;
@@ -1338,12 +1404,17 @@ export const Step6CalendarAndPhone: React.FC = () => {
     setOtpSent(true);
   };
 
-  const handleVerifyOtp = () => {
-    if (otpInput.trim() === "4829" || otpInput.trim().length >= 4) {
-      state.setNumberVerified(true);
-      setOtpError(null);
-    } else {
-      setOtpError("Invalid code. Use demo code 4829.");
+  const handleVerifyOtp = async () => {
+    try {
+      const result = await api.verifyOtpCode(state.forwardingNumber, otpInput);
+      if (result.verified) {
+        state.setNumberVerified(true);
+        setOtpError(null);
+      } else {
+        setOtpError("Invalid code. Use demo code 4829.");
+      }
+    } catch {
+      setOtpError("Verification request failed. Please try again.");
     }
   };
 
@@ -1356,49 +1427,88 @@ export const Step6CalendarAndPhone: React.FC = () => {
   const handleProvisionConfirm = async () => {
     setShowCheckout(false);
     setIsProvisioning(true);
+    setProvisionError(null);
 
-    const response = await api.provisionAgent({
-      businessName: state.businessName,
-      industry: state.industry,
-      timezone: state.timezone,
-      operatingHours: state.operatingHours,
-      services: state.services,
-      departments: state.departments,
-      knowledgeFaqs: state.knowledgeFaqs,
-      voicePersona: state.voicePersona,
-      googleCalendarConnected: state.googleCalendarConnected,
-      calendarEmail: state.calendarEmail,
-      telephonySetupType: state.telephonySetupType,
-      forwardingNumber: state.forwardingNumber,
-      selectedCarrierId: state.selectedCarrierId,
-      isNumberVerified: state.isNumberVerified,
-      sipConfig: state.sipConfig,
-      planTier: state.planTier,
-    });
+    try {
+      const response = await api.provisionAgent({
+        businessName: state.businessName,
+        industry: state.industry,
+        timezone: state.timezone,
+        operatingHours: state.operatingHours,
+        services: state.services,
+        departments: state.departments,
+        knowledgeFaqs: state.knowledgeFaqs,
+        voicePersona: state.voicePersona,
+        googleCalendarConnected: state.googleCalendarConnected,
+        calendarEmail: state.calendarEmail,
+        telephonySetupType: state.telephonySetupType,
+        forwardingNumber: state.forwardingNumber,
+        selectedCarrierId: state.selectedCarrierId,
+        isNumberVerified: state.isNumberVerified,
+        sipConfig: state.sipConfig,
+        planTier: state.planTier,
+        phoneCountry: state.phoneCountry,
+        selectedPhoneNumber:
+          useByoTwilio && byoPhoneNumber.trim()
+            ? byoPhoneNumber.trim()
+            : state.selectedPhoneNumber || undefined,
+        byoTwilio:
+          useByoTwilio &&
+          byoAccountSid.trim() &&
+          byoAuthToken.trim() &&
+          byoPhoneNumber.trim()
+            ? {
+                accountSid: byoAccountSid.trim(),
+                authToken: byoAuthToken.trim(),
+                phoneNumber: byoPhoneNumber.trim(),
+              }
+            : undefined,
+      });
 
-    state.setProvisionedResult(response.agentId, response.virtualPhoneNumber);
-    login("owner@yourbusiness.com", state.businessName);
-    updateUser({
-      businessName: state.businessName,
-      industry: state.industry,
-      virtualPhoneNumber: response.virtualPhoneNumber,
-      timezone: state.timezone,
-      planTier: state.planTier,
-      voicePersona: state.voicePersona,
-      services: state.services,
-      departments: state.departments,
-      knowledgeFaqs: state.knowledgeFaqs,
-      operatingHours: state.operatingHours,
-    });
-    setIsProvisioning(false);
-    navigateTo("success");
+      state.setProvisionedResult(response.agentId, response.virtualPhoneNumber);
+      login("owner@yourbusiness.com", state.businessName);
+      updateUser({
+        id: response.agentId,
+        businessName: state.businessName,
+        industry: state.industry,
+        virtualPhoneNumber: response.virtualPhoneNumber,
+        timezone: state.timezone,
+        planTier: state.planTier,
+        voicePersona: state.voicePersona,
+        services: state.services,
+        departments: state.departments,
+        knowledgeFaqs: state.knowledgeFaqs,
+        operatingHours: state.operatingHours,
+      });
+      navigateTo("success");
+    } catch (error) {
+      setProvisionError(
+        error instanceof Error
+          ? error.message
+          : "Failed to provision Vapi agent."
+      );
+    } finally {
+      setIsProvisioning(false);
+    }
   };
 
   const isDeployDisabled =
     (state.telephonySetupType === "call_forwarding" &&
       !state.forwardingNumber.trim()) ||
     (state.telephonySetupType === "sip_pbx_trunk" &&
-      !state.sipConfig.sipUri.trim());
+      !state.sipConfig.sipUri.trim()) ||
+    ((state.telephonySetupType === "new_dedicated_number" ||
+      state.telephonySetupType === "call_forwarding") &&
+      useByoTwilio &&
+      (!byoAccountSid.trim() ||
+        !byoAuthToken.trim() ||
+        !byoPhoneNumber.trim()));
+
+  const cleanSelectedAiNumber =
+    (useByoTwilio && byoPhoneNumber.trim()
+      ? byoPhoneNumber.trim()
+      : state.selectedPhoneNumber
+    ).replace(/[^\d+]/g, "") || "800945XXXX";
 
   return (
     <div className="space-y-6">
@@ -1433,28 +1543,12 @@ export const Step6CalendarAndPhone: React.FC = () => {
               <p className="text-xs text-slate-400 mt-1">
                 {state.googleCalendarConnected
                   ? `Synced with ${state.calendarEmail} — AI checks conflicts before booking.`
-                  : "Prevent double-bookings by allowing your AI to read free/busy slots and create events."}
+                  : "After you deploy, open Agent Settings and click Connect Google Calendar so your AI can read free/busy slots and create events."}
               </p>
             </div>
           </div>
 
-          {state.googleCalendarConnected ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={disconnectGoogleCalendar}
-            >
-              Disconnect
-            </Button>
-          ) : (
-            <Button
-              variant="secondary"
-              onClick={connectGoogleCalendar}
-              isLoading={isConnecting}
-            >
-              Connect Google Calendar
-            </Button>
-          )}
+          <Badge variant="default">Connect after deploy</Badge>
         </div>
 
         <div className="mb-6">
@@ -1528,6 +1622,206 @@ export const Step6CalendarAndPhone: React.FC = () => {
               );
             })}
           </div>
+
+          {(state.telephonySetupType === "new_dedicated_number" ||
+            state.telephonySetupType === "call_forwarding") && (
+            <div className="mt-4 p-5 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Phone className="w-4 h-4 text-[#14B8A6]" />
+                      Choose Your Dedicated Local AI Number
+                    </h4>
+                    {searchMode && !useByoTwilio && (
+                      <Badge
+                        variant={searchMode === "twilio" ? "success" : "info"}
+                      >
+                        {searchMode === "twilio"
+                          ? "Live Twilio Inventory"
+                          : "Sandbox Preview"}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {state.telephonySetupType === "call_forwarding"
+                      ? "Pick the local AI line your existing business number will forward calls to."
+                      : "Search by country and area code, then click to reserve your AI line."}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setUseByoTwilio((v) => !v)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer",
+                    useByoTwilio
+                      ? "bg-[#14B8A6]/15 border-[#14B8A6] text-[#14B8A6]"
+                      : "bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-500"
+                  )}
+                >
+                  {useByoTwilio
+                    ? "← Back to Managed Number Search"
+                    : "Bring Your Own Twilio Account"}
+                </button>
+              </div>
+
+              {useByoTwilio ? (
+                <div className="p-4 rounded-xl bg-slate-900/90 border border-[#14B8A6]/30 space-y-3">
+                  <p className="text-xs text-slate-300">
+                    Connect a number already purchased in your own Twilio
+                    account (great for instant UK local or Australia +61 lines).
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <Input
+                      label="Twilio Account SID"
+                      placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                      value={byoAccountSid}
+                      onChange={(e) => setByoAccountSid(e.target.value)}
+                    />
+                    <Input
+                      label="Twilio Auth Token"
+                      type="password"
+                      placeholder="••••••••••••••••••••••••••••••••"
+                      value={byoAuthToken}
+                      onChange={(e) => setByoAuthToken(e.target.value)}
+                    />
+                    <Input
+                      label="Existing Twilio Number (E.164)"
+                      placeholder="e.g., +442079460101 or +61280152104"
+                      value={byoPhoneNumber}
+                      onChange={(e) => setByoPhoneNumber(e.target.value)}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                    <Select
+                      label="Country"
+                      value={state.phoneCountry}
+                      onChange={(e) => {
+                        const next = e.target.value as PhoneCountry;
+                        state.setPhoneCountry(next);
+                        if (next === "GB") {
+                          setNumberType("mobile");
+                        } else if (numberType === "mobile") {
+                          setNumberType("local");
+                        }
+                      }}
+                      options={[
+                        { value: "US", label: "United States (+1)" },
+                        { value: "GB", label: "United Kingdom (+44)" },
+                        { value: "AU", label: "Australia (+61)" },
+                      ]}
+                    />
+
+                    <Select
+                      label="Number Type"
+                      value={numberType}
+                      onChange={(e) =>
+                        setNumberType(e.target.value as PhoneNumberType)
+                      }
+                      options={[
+                        { value: "local", label: "Local Number" },
+                        { value: "mobile", label: "Mobile Number" },
+                        { value: "tollfree", label: "Toll-Free" },
+                      ]}
+                    />
+
+                    <Input
+                      label="Area Code / Prefix (Optional)"
+                      placeholder={
+                        state.phoneCountry === "US"
+                          ? "e.g., 415 or 212"
+                          : state.phoneCountry === "GB"
+                          ? "e.g., 20 or 7400"
+                          : "e.g., 02 or 03"
+                      }
+                      value={areaCode}
+                      onChange={(e) => setAreaCode(e.target.value)}
+                    />
+
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() =>
+                        void runNumberSearch(
+                          state.phoneCountry,
+                          areaCode,
+                          numberType
+                        )
+                      }
+                      isLoading={isSearchingNumbers}
+                      className="w-full"
+                    >
+                      <Search className="w-4 h-4" />
+                      <span>Search Numbers</span>
+                    </Button>
+                  </div>
+
+                  {requiresBundle && (
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+                      <span>
+                        {state.phoneCountry === "GB"
+                          ? "UK (+44) numbers require an approved Twilio Regulatory Bundle (mobile +44 7xx accepts any country address, or use BYO Twilio)."
+                          : "Australia (+61) numbers require an approved AU Regulatory Bundle with Twilio, or click Bring Your Own Twilio Account above."}
+                      </span>
+                    </div>
+                  )}
+
+                  {searchError && (
+                    <p className="text-xs text-rose-400 flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5" /> {searchError}
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {availableNumbers.map((num) => {
+                      const isPicked =
+                        state.selectedPhoneNumber === num.phoneNumber;
+                      return (
+                        <button
+                          key={num.phoneNumber}
+                          type="button"
+                          onClick={() =>
+                            state.setSelectedPhoneNumber(num.phoneNumber)
+                          }
+                          className={cn(
+                            "p-3.5 rounded-xl border text-left transition flex items-center justify-between gap-3 cursor-pointer",
+                            isPicked
+                              ? "bg-[#14B8A6]/15 border-[#14B8A6] shadow-sm"
+                              : "bg-slate-900/70 border-slate-800 hover:border-slate-700"
+                          )}
+                        >
+                          <div>
+                            <div className="font-mono text-sm font-bold text-white">
+                              {num.friendlyName || num.phoneNumber}
+                            </div>
+                            <div className="text-[11px] text-slate-400 mt-0.5">
+                              {num.locality}
+                              {num.region ? `, ${num.region}` : ""} •{" "}
+                              <span className="text-[#14B8A6]">
+                                {num.monthlyPrice}
+                              </span>
+                            </div>
+                          </div>
+                          {isPicked ? (
+                            <CheckCircle2 className="w-4 h-4 text-[#14B8A6] shrink-0" />
+                          ) : (
+                            <span className="text-[11px] text-slate-500 font-medium shrink-0">
+                              Select
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {state.telephonySetupType === "call_forwarding" && (
             <div className="mt-4 p-5 rounded-2xl bg-slate-950/90 border border-[#14B8A6]/30 space-y-5">
@@ -1633,14 +1927,14 @@ export const Step6CalendarAndPhone: React.FC = () => {
                       label: "Forward All Calls (24/7)",
                       code: selectedCarrier.forwardAll.replace(
                         "{AI_NUMBER}",
-                        "800945XXXX"
+                        cleanSelectedAiNumber
                       ),
                     },
                     {
                       label: "Forward If Busy / No Answer",
                       code: selectedCarrier.forwardBusyNoAnswer.replace(
                         "{AI_NUMBER}",
-                        "800945XXXX"
+                        cleanSelectedAiNumber
                       ),
                     },
                     {
@@ -1650,28 +1944,37 @@ export const Step6CalendarAndPhone: React.FC = () => {
                   ].map((item) => (
                     <div
                       key={item.label}
-                      className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between"
+                      className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between gap-2"
                     >
-                      <div>
+                      <div className="min-w-0">
                         <span className="text-[10px] text-slate-400 block">
                           {item.label}
                         </span>
-                        <code className="text-[#14B8A6] font-mono font-bold">
+                        <code className="text-[#14B8A6] font-mono font-bold truncate block">
                           {item.code}
                         </code>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => copyDialCode(item.code)}
-                        className="p-1.5 text-slate-400 hover:text-white cursor-pointer"
-                        title="Copy dial string"
-                      >
-                        {copiedCode === item.code ? (
-                          <Check className="w-3.5 h-3.5 text-[#14B8A6]" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5" />
-                        )}
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <a
+                          href={`tel:${encodeURIComponent(item.code)}`}
+                          className="px-2 py-1 rounded bg-[#14B8A6]/15 text-[#14B8A6] hover:bg-[#14B8A6]/25 text-[10px] font-semibold"
+                          title="Tap on mobile to dial code"
+                        >
+                          Dial
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => copyDialCode(item.code)}
+                          className="p-1.5 text-slate-400 hover:text-white cursor-pointer"
+                          title="Copy dial string"
+                        >
+                          {copiedCode === item.code ? (
+                            <Check className="w-3.5 h-3.5 text-[#14B8A6]" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1799,6 +2102,13 @@ export const Step6CalendarAndPhone: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {provisionError && (
+          <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{provisionError}</span>
+          </div>
+        )}
 
         <div className="mt-8 flex justify-between items-center">
           <Button variant="outline" onClick={state.prevStep}>
@@ -1953,6 +2263,7 @@ export const SuccessPage: React.FC = () => {
   const handleOpenDashboard = () => {
     login("owner@yourbusiness.com", businessName);
     updateUser({
+      id: provisionedAgentId || "usr_demo_01",
       businessName,
       industry,
       virtualPhoneNumber: displayPhone,

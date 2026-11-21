@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Vapi from "@vapi-ai/web";
 import { useOnboardingStore } from "./CallColleagueContext";
 import { VOICE_PERSONAS } from "./industryTemplates";
 import { AgentProvisionPayload, ProvisionResponse } from "./types";
@@ -413,141 +414,118 @@ export const api = {
     payload: AgentProvisionPayload,
     onStepUpdate?: (step: ProvisioningStepResult["step"]) => void
   ): Promise<ProvisionResponse> => {
-    try {
-      if (process.env.NEXT_PUBLIC_API_BASE_URL) {
-        const response = await fetch(`${API_BASE_URL}/agents/provision`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (response.ok) return await response.json();
-      }
-      throw new Error("Backend offline — running cloud simulation");
-    } catch {
-      onStepUpdate?.("supabase_tenant");
-      await new Promise((res) => setTimeout(res, 750));
+    onStepUpdate?.("supabase_tenant");
+    onStepUpdate?.("vapi_assistant");
 
-      onStepUpdate?.("vapi_assistant");
-      await new Promise((res) => setTimeout(res, 850));
+    const response = await fetch(`${API_BASE_URL}/agents/provision`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
-      onStepUpdate?.("phone_binding");
-      await new Promise((res) => setTimeout(res, 750));
-
-      onStepUpdate?.("smoke_test");
-      await new Promise((res) => setTimeout(res, 650));
-
-      const randomDigits = Math.floor(1000 + Math.random() * 9000);
-      const assignedNumber =
-        payload.telephonySetupType === "new_dedicated_number"
-          ? `+1 (888) 412-${randomDigits}`
-          : `+1 (800) 945-${randomDigits}`;
-
-      return {
-        agentId: `ag_${Math.random().toString(36).substring(2, 10)}`,
-        virtualPhoneNumber: assignedNumber,
-        sipEndpointUri:
-          payload.telephonySetupType === "sip_pbx_trunk"
-            ? payload.sipConfig.sipUri ||
-              `sip:agent-${randomDigits}@sip.vapi.ai;transport=tls`
-            : undefined,
-        status: "active",
+    if (!response.ok) {
+      const err = (await response.json().catch(() => ({}))) as {
+        detail?: string;
+        error?: string;
       };
+      throw new Error(err.detail || err.error || "Failed to provision Vapi agent");
     }
+
+    onStepUpdate?.("phone_binding");
+    onStepUpdate?.("smoke_test");
+    return (await response.json()) as ProvisionResponse;
+  },
+
+  searchAvailableNumbers: async (
+    country: string,
+    areaCode: string,
+    numberType: string
+  ): Promise<{
+    mode: "twilio" | "sandbox";
+    country: string;
+    numberType: string;
+    requiresBundle: boolean;
+    numbers: import("./types").AvailablePhoneNumber[];
+    error?: string;
+  }> => {
+    const params = new URLSearchParams({ country, numberType });
+    if (areaCode.trim()) params.set("areaCode", areaCode.trim());
+    const response = await fetch(
+      `${API_BASE_URL}/telephony/numbers/search?${params.toString()}`
+    );
+    if (!response.ok) {
+      throw new Error("Failed to search available numbers");
+    }
+    return response.json();
   },
 
   triggerOtpVerification: async (
     phoneNumber: string
-  ): Promise<{ sent: boolean; demoCode: string }> => {
-    await new Promise((res) => setTimeout(res, 800));
-    console.info(`[Telephony OTP] Verification triggered for ${phoneNumber}`);
-    return { sent: true, demoCode: "4829" };
+  ): Promise<{ sent: boolean; demoCode?: string }> => {
+    const response = await fetch(`${API_BASE_URL}/telephony/otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "send", phoneNumber }),
+    });
+    return (await response.json()) as { sent: boolean; demoCode?: string };
+  },
+
+  verifyOtpCode: async (
+    phoneNumber: string,
+    code: string
+  ): Promise<{ verified: boolean }> => {
+    const response = await fetch(`${API_BASE_URL}/telephony/otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "verify", phoneNumber, code }),
+    });
+    return (await response.json()) as { verified: boolean };
   },
 };
 
+const CC_API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
+
+/**
+ * Real per-tenant Google Calendar OAuth (server-side code flow).
+ * The agent must already exist (provisioned) so the refresh token can be
+ * stored against its tenant. Google redirects back to /console?gcal=...
+ */
 export const useGoogleAuth = () => {
-  const { setGoogleCalendarConnected, setCalendarEmail } = useOnboardingStore();
   const [isConnecting, setIsConnecting] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  const connectGoogleCalendar = useCallback(() => {
+  const connectGoogleCalendar = useCallback(async (agentId: string) => {
     setIsConnecting(true);
     setAuthError(null);
-
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-    const isRealClientIdConfigured =
-      clientId &&
-      clientId !== "your_google_oauth_client_id.apps.googleusercontent.com" &&
-      clientId.includes(".apps.googleusercontent.com");
-
-    if (
-      isRealClientIdConfigured &&
-      typeof window !== "undefined" &&
-      (window as unknown as { google?: { accounts?: { oauth2?: { initTokenClient: (cfg: unknown) => { requestAccessToken: () => void } } } } }).google?.accounts?.oauth2
-    ) {
-      try {
-        const googleObj = (window as unknown as {
-          google: {
-            accounts: {
-              oauth2: {
-                initTokenClient: (cfg: {
-                  client_id: string;
-                  scope: string;
-                  callback: (resp: { error?: string; access_token?: string }) => void;
-                }) => { requestAccessToken: () => void };
-              };
-            };
-          };
-        }).google;
-
-        const tokenClient = googleObj.accounts.oauth2.initTokenClient({
-          client_id: clientId!,
-          scope:
-            "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email",
-          callback: async (response) => {
-            if (response.error) {
-              setAuthError("Google authentication cancelled or failed.");
-              setIsConnecting(false);
-              return;
-            }
-            if (response.access_token) {
-              try {
-                const userInfoRes = await fetch(
-                  "https://www.googleapis.com/oauth2/v3/userinfo",
-                  {
-                    headers: {
-                      Authorization: `Bearer ${response.access_token}`,
-                    },
-                  }
-                );
-                const userInfo = await userInfoRes.json();
-                setCalendarEmail(userInfo.email || "bookings@yourbusiness.com");
-                setGoogleCalendarConnected(true);
-              } catch {
-                setCalendarEmail("connected-calendar@gmail.com");
-                setGoogleCalendarConnected(true);
-              }
-            }
-            setIsConnecting(false);
-          },
-        });
-        tokenClient.requestAccessToken();
-        return;
-      } catch (err) {
-        console.warn("Falling back to simulated Google OAuth:", err);
+    try {
+      const res = await fetch(
+        `${CC_API_BASE}/integrations/google/connect?agentId=${encodeURIComponent(agentId)}`
+      );
+      const data = await res.json();
+      if (!res.ok || !data.authUrl) {
+        throw new Error(data.detail || "Could not start Google sign-in.");
       }
-    }
-
-    setTimeout(() => {
-      setCalendarEmail("reception.calendar@gmail.com");
-      setGoogleCalendarConnected(true);
+      window.location.href = data.authUrl;
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "Google sign-in failed.");
       setIsConnecting(false);
-    }, 1000);
-  }, [setCalendarEmail, setGoogleCalendarConnected]);
+    }
+  }, []);
 
-  const disconnectGoogleCalendar = useCallback(() => {
-    setGoogleCalendarConnected(false);
-    setCalendarEmail("");
-  }, [setCalendarEmail, setGoogleCalendarConnected]);
+  const disconnectGoogleCalendar = useCallback(async (agentId: string) => {
+    setAuthError(null);
+    try {
+      const res = await fetch(
+        `${CC_API_BASE}/integrations/google/${encodeURIComponent(agentId)}`,
+        { method: "DELETE" }
+      );
+      return res.ok;
+    } catch {
+      setAuthError("Could not disconnect Google Calendar.");
+      return false;
+    }
+  }, []);
 
   return {
     connectGoogleCalendar,
@@ -558,8 +536,16 @@ export const useGoogleAuth = () => {
 };
 
 export const useVapiWeb = (voiceName: string = "Sophia") => {
-  const { businessName, services, departments, knowledgeFaqs } =
-    useOnboardingStore();
+  const {
+    businessName,
+    industry,
+    timezone,
+    operatingHours,
+    services,
+    departments,
+    knowledgeFaqs,
+    voicePersona,
+  } = useOnboardingStore();
 
   const [isCallActive, setIsCallActive] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -569,6 +555,7 @@ export const useVapiWeb = (voiceName: string = "Sophia") => {
     { role: "agent" | "user"; text: string }[]
   >([]);
 
+  const vapiRef = useRef<Vapi | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
@@ -588,9 +575,148 @@ export const useVapiWeb = (voiceName: string = "Sophia") => {
 
   const startCall = useCallback(async () => {
     setIsConnecting(true);
+    setIsMuted(false);
     setTranscript([]);
     clearTimers();
+    stopPersonaSpeech();
 
+    const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY?.trim();
+    const hasRealVapiKey = Boolean(publicKey && publicKey !== "API KEY 1");
+
+    if (hasRealVapiKey && publicKey) {
+      try {
+        if (vapiRef.current) {
+          await vapiRef.current.stop().catch(() => {});
+          vapiRef.current = null;
+        }
+
+        let assistantDto: Record<string, unknown> | null = null;
+        try {
+          const res = await fetch(`${API_BASE_URL}/agents/sandbox-config`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              businessName,
+              industry,
+              timezone,
+              operatingHours,
+              services,
+              departments,
+              knowledgeFaqs,
+              voicePersona,
+            }),
+          });
+          if (res.ok) {
+            assistantDto = (await res.json()) as Record<string, unknown>;
+          }
+        } catch {
+          // Fall back to client-built inline DTO if backend is unreachable
+        }
+
+        if (!assistantDto) {
+          const voiceMap: Record<string, string> = {
+            "v-sophia": "nova",
+            "v-maya": "shimmer",
+            "v-marcus": "onyx",
+            "v-liam": "echo",
+            "v-arjun": "fable",
+          };
+          assistantDto = {
+            name: `${businessName || "CallColleague"} (${voiceName})`.slice(0, 40),
+            firstMessage: `Hi! Thank you for calling ${
+              businessName || "our office"
+            }. This is ${voiceName}, your AI receptionist. How can I help you today?`,
+            transcriber: {
+              provider: "deepgram",
+              model: "nova-2",
+              language: "en",
+            },
+            model: {
+              provider: "openai",
+              model: "gpt-4o-mini",
+              temperature: 0.3,
+              messages: [
+                {
+                  role: "system",
+                  content: `You are ${voiceName}, the AI receptionist for ${businessName} (${timezone}). Services: ${JSON.stringify(
+                    services
+                  )}. FAQs: ${JSON.stringify(
+                    knowledgeFaqs
+                  )}. Operating hours: ${JSON.stringify(operatingHours)}.`,
+                },
+              ],
+            },
+            voice: {
+              provider: "openai",
+              voiceId: voiceMap[voicePersona.id] || "nova",
+            },
+            maxDurationSeconds: 180,
+            silenceTimeoutSeconds: 30,
+          };
+        }
+
+        const vapi = new Vapi(publicKey);
+        vapiRef.current = vapi;
+
+        vapi.on("call-start", () => {
+          setIsConnecting(false);
+          setIsCallActive(true);
+        });
+
+        vapi.on("call-end", () => {
+          setIsCallActive(false);
+          setIsConnecting(false);
+          setVolumeLevel(0);
+          vapiRef.current = null;
+        });
+
+        vapi.on("volume-level", (vol: number) => {
+          setVolumeLevel(Math.min(1, vol + 0.12));
+        });
+
+        vapi.on("message", (msg: unknown) => {
+          const payload = msg as {
+            type?: string;
+            transcriptType?: string;
+            role?: string;
+            transcript?: string;
+          };
+          if (
+            payload?.type === "transcript" &&
+            payload?.transcriptType === "final" &&
+            payload?.transcript
+          ) {
+            setTranscript((prev) => [
+              ...prev,
+              {
+                role: payload.role === "user" ? "user" : "agent",
+                text: payload.transcript!,
+              },
+            ]);
+          }
+        });
+
+        vapi.on("error", (err: unknown) => {
+          console.warn("[Vapi WebRTC]", err);
+          setIsConnecting(false);
+          setIsCallActive(false);
+          setVolumeLevel(0);
+        });
+
+        await vapi.start(
+          assistantDto as unknown as Parameters<Vapi["start"]>[0]
+        );
+        return;
+      } catch (err) {
+        console.warn("[Vapi WebRTC start failed]", err);
+        vapiRef.current = null;
+        setIsConnecting(false);
+        setIsCallActive(false);
+        return;
+      }
+    }
+
+    // Fallback browser simulation when NEXT_PUBLIC_VAPI_PUBLIC_KEY is not configured
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
@@ -667,19 +793,36 @@ export const useVapiWeb = (voiceName: string = "Sophia") => {
     }
 
     timersRef.current.push(t1, t2, t3);
-  }, [businessName, departments, knowledgeFaqs, services, speakText, voiceName]);
+  }, [
+    businessName,
+    departments,
+    industry,
+    knowledgeFaqs,
+    operatingHours,
+    services,
+    speakText,
+    timezone,
+    voiceName,
+    voicePersona,
+  ]);
 
   const stopCall = useCallback(() => {
     clearTimers();
+    if (vapiRef.current) {
+      vapiRef.current.stop().catch(() => {});
+      vapiRef.current = null;
+    }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
     }
     if (audioContextRef.current) {
       audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
     }
     setIsCallActive(false);
     setIsConnecting(false);
@@ -689,6 +832,9 @@ export const useVapiWeb = (voiceName: string = "Sophia") => {
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => {
       const next = !prev;
+      if (vapiRef.current) {
+        vapiRef.current.setMuted(next);
+      }
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getAudioTracks().forEach((t) => {
           t.enabled = !next;
@@ -699,7 +845,7 @@ export const useVapiWeb = (voiceName: string = "Sophia") => {
   }, []);
 
   useEffect(() => {
-    if (!isCallActive || mediaStreamRef.current) return;
+    if (!isCallActive || mediaStreamRef.current || vapiRef.current) return;
     const interval = window.setInterval(() => {
       setVolumeLevel(Math.random() * 0.65 + 0.15);
     }, 180);
@@ -709,6 +855,10 @@ export const useVapiWeb = (voiceName: string = "Sophia") => {
   useEffect(() => {
     return () => {
       clearTimers();
+      if (vapiRef.current) {
+        vapiRef.current.stop().catch(() => {});
+        vapiRef.current = null;
+      }
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
       }

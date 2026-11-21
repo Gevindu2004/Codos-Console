@@ -1,0 +1,24 @@
+# ThumbsUp Email API
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0
+alembic>=1.13
+pydantic>=2.7
+pydantic-settings>=2.3
+python-multipart>=0.0.9
+pyjwt>=2.8
+email-validator>=2.1
+httpx>=0.27
+boto3>=1.34              # Amazon SES
+psycopg[binary]>=3.1     # PostgreSQL (production database)
+google-auth>=2.30        # Drive Assets: Google service account
+requests>=2.31           # (used by google-auth to fetch tokens)
+Pillow>=10.4             # Drive Assets: image resizing, WebP/AVIF
+azure-storage-blob>=12.19  # Drive Assets on Azure Blob Storage
+azure-identity>=1.15     # Azure managed identity (no passwords in settings)
+azure-communication-email>=1.0  # Email on Azure (Azure Communication Services)
+cryptography>=43         # Sheets: encrypts customers' Google sign-in tokens
+
+# Tests
+pytest>=8.0
+moto[s3]>=5.0
