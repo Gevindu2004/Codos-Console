@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   PhoneCall,
   LayoutDashboard,
@@ -63,6 +63,9 @@ const INITIAL_API_KEYS: ColleagueApiKey[] = [
   },
 ];
 
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
+
 function DeveloperApiDrawer() {
   const { businessName, voicePersona, virtualPhoneNumber } =
     useOnboardingStore();
@@ -71,21 +74,59 @@ function DeveloperApiDrawer() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
 
+  useEffect(() => {
+    let active = true;
+    fetch(`${API_BASE_URL}/voice/keys`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { keys?: ColleagueApiKey[] } | null) => {
+        if (active && data?.keys && Array.isArray(data.keys)) {
+          setApiKeys(data.keys);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const handleCopyKey = (id: string, secret: string) => {
     navigator.clipboard.writeText(secret);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 1800);
   };
 
-  const handleCreateKey = (e: React.FormEvent) => {
+  const handleCreateKey = async (e: React.FormEvent) => {
     e.preventDefault();
     const nextNum = apiKeys.length + 1;
-    const newEntry: ColleagueApiKey = {
+    const label =
+      newKeyLabel.trim() ||
+      `${businessName || "CallColleague"} Voice Key #${nextNum}`;
+    const agentLabel = `${businessName} (${voicePersona.name})`;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/voice/keys`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: label, agentName: agentLabel }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as {
+          key: ColleagueApiKey;
+          plainSecret: string;
+        };
+        setApiKeys((prev) => [data.key, ...prev]);
+        setNewKeyLabel("");
+        handleCopyKey(data.key.id, data.plainSecret || data.key.keySecret);
+        return;
+      }
+    } catch {
+      // Fall back to local key creation if request fails
+    }
+
+    const fallbackEntry: ColleagueApiKey = {
       id: `cc-key-${Date.now()}`,
-      name:
-        newKeyLabel.trim() ||
-        `${businessName || "CallColleague"} Voice Key #${nextNum}`,
-      agentName: `${businessName} (${voicePersona.name})`,
+      name: label,
+      agentName: agentLabel,
       keySecret: `API KEY ${nextNum}`,
       scopes: [
         "voice:inbound-sip",
@@ -95,9 +136,16 @@ function DeveloperApiDrawer() {
       webhookUrl: "https://api.viacodos.com/v1/webhooks/call-colleague",
       created: "Just now",
     };
-    setApiKeys([newEntry, ...apiKeys]);
+    setApiKeys((prev) => [fallbackEntry, ...prev]);
     setNewKeyLabel("");
-    handleCopyKey(newEntry.id, newEntry.keySecret);
+    handleCopyKey(fallbackEntry.id, fallbackEntry.keySecret);
+  };
+
+  const handleRevokeKey = async (id: string) => {
+    setApiKeys((prev) => prev.filter((k) => k.id !== id));
+    fetch(`${API_BASE_URL}/voice/keys?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }).catch(() => {});
   };
 
   const snippetText = `import { CallColleagueClient } from "@viacodos/call-colleague-sdk";
@@ -205,9 +253,7 @@ const session = await agent.calls.dispatch({
                 </Button>
                 {apiKeys.length > 1 && (
                   <button
-                    onClick={() =>
-                      setApiKeys((prev) => prev.filter((k) => k.id !== item.id))
-                    }
+                    onClick={() => handleRevokeKey(item.id)}
                     className="p-2 text-slate-500 hover:text-rose-400 transition cursor-pointer"
                     title="Revoke Key"
                   >

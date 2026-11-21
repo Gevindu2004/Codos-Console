@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   PhoneIncoming,
   Copy,
@@ -43,7 +43,7 @@ import {
   ShieldCheck,
   Square,
 } from "lucide-react";
-import { speakWithPersona, stopPersonaSpeech } from "./hooks";
+import { speakWithPersona, stopPersonaSpeech, useGoogleAuth } from "./hooks";
 import {
   useAdminStore,
   useCallColleagueNavigation,
@@ -172,18 +172,45 @@ export const CallDetailModal: React.FC<CallDetailModalProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     setIsPlaying(false);
     setProgress(0);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
   }, [call]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackSpeed;
+    }
+  }, [playbackSpeed]);
 
   useEffect(() => {
     if (!isPlaying) return;
     const interval = window.setInterval(() => {
+      if (audioRef.current && audioRef.current.duration > 0) {
+        const pct = Math.min(
+          100,
+          Math.round(
+            (audioRef.current.currentTime / audioRef.current.duration) * 100
+          )
+        );
+        setProgress(pct);
+        return;
+      }
       setProgress((prev) => {
         if (prev >= 100) {
           setIsPlaying(false);
@@ -200,11 +227,31 @@ export const CallDetailModal: React.FC<CallDetailModalProps> = ({
   const toggleAudioPlayback = () => {
     if (isPlaying) {
       setIsPlaying(false);
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       return;
     }
 
     setIsPlaying(true);
+    if (call.recordingUrl) {
+      if (!audioRef.current || audioRef.current.src !== call.recordingUrl) {
+        const audio = new Audio(call.recordingUrl);
+        audio.onended = () => {
+          setIsPlaying(false);
+          setProgress(100);
+        };
+        audio.onerror = () => {
+          setIsPlaying(false);
+        };
+        audioRef.current = audio;
+      }
+      audioRef.current.playbackRate = playbackSpeed;
+      audioRef.current.play().catch(() => setIsPlaying(false));
+      return;
+    }
+
     if ("speechSynthesis" in window && call.transcript.length > 0) {
       window.speechSynthesis.cancel();
       const combined = call.transcript.map((t) => t.text).join(" ... ");
@@ -567,7 +614,16 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 
   const displayed = limit ? filtered.slice(0, limit) : filtered;
 
-  const sendSmsReminder = (apt: AppointmentItem) => {
+  const sendSmsReminder = async (apt: AppointmentItem) => {
+    const apiBase =
+      process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
+    try {
+      await fetch(`${apiBase}/appointments/${encodeURIComponent(apt.id)}`, {
+        method: "POST",
+      });
+    } catch {
+      // Non-blocking toast fallback
+    }
     setSmsToast(
       `SMS reminder sent to ${apt.clientName} (${apt.clientPhone}) for ${apt.dateTime}`
     );
@@ -811,6 +867,7 @@ export const BookingsManager: React.FC<BookingsManagerProps> = ({
 export const AgentSettingsView: React.FC = () => {
   const {
     user,
+    vapiSyncStatus,
     setAdminVoicePersona,
     addAdminService,
     updateAdminService,
@@ -821,6 +878,7 @@ export const AgentSettingsView: React.FC = () => {
     addAdminFaq,
     updateAdminFaq,
     removeAdminFaq,
+    updateAdminOperatingHour,
   } = useAdminStore();
 
   const [selectedCarrier, setSelectedCarrier] = useState(
@@ -835,6 +893,41 @@ export const AgentSettingsView: React.FC = () => {
     return () => stopPersonaSpeech();
   }, []);
 
+  const {
+    connectGoogleCalendar,
+    disconnectGoogleCalendar,
+    isConnecting: isConnectingGoogle,
+    authError: googleAuthError,
+  } = useGoogleAuth();
+  const [gcalBanner, setGcalBanner] = useState<string | null>(null);
+
+  // Show result after Google redirects back to /console?gcal=connected|error
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("gcal");
+    if (!result) return;
+    setGcalBanner(
+      result === "connected"
+        ? "Google Calendar connected. Your AI will now book into your calendar."
+        : "Google Calendar connection failed. Please try again."
+    );
+    params.delete("gcal");
+    params.delete("agentId");
+    const qs = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      window.location.pathname + (qs ? `?${qs}` : "")
+    );
+  }, []);
+
+  const handleDisconnectGoogle = async () => {
+    if (user && (await disconnectGoogleCalendar(user.id))) {
+      setGcalBanner("Google Calendar disconnected.");
+      window.location.reload();
+    }
+  };
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<ServiceItem | null>(
     null
@@ -994,6 +1087,42 @@ export const AgentSettingsView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {vapiSyncStatus !== "idle" && (
+        <div
+          className={cn(
+            "p-3 rounded-xl border text-xs flex items-center justify-between gap-2",
+            vapiSyncStatus === "syncing"
+              ? "bg-slate-900/80 border-slate-700 text-slate-300"
+              : vapiSyncStatus === "synced"
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+              : "bg-amber-500/10 border-amber-500/30 text-amber-300"
+          )}
+        >
+          <span>
+            {vapiSyncStatus === "syncing"
+              ? "Syncing latest changes to Vapi..."
+              : vapiSyncStatus === "synced"
+              ? "Synced to Vapi — your live AI assistant has the latest changes."
+              : "Saved to DB (Vapi sync offline — assistant may not exist on Vapi)."}
+          </span>
+          <Badge
+            variant={
+              vapiSyncStatus === "synced"
+                ? "success"
+                : vapiSyncStatus === "failed"
+                ? "warning"
+                : "default"
+            }
+          >
+            {vapiSyncStatus === "syncing"
+              ? "Syncing"
+              : vapiSyncStatus === "synced"
+              ? "Synced to Vapi"
+              : "DB Only"}
+          </Badge>
+        </div>
+      )}
+
       {savedBanner && (
         <div className="p-3.5 rounded-xl bg-[#14B8A6]/15 border border-[#14B8A6]/35 text-xs text-[#14B8A6] flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-[#14B8A6] shrink-0" />
@@ -1294,23 +1423,125 @@ export const AgentSettingsView: React.FC = () => {
         </Card>
 
         <Card>
-          <h3 className="text-base font-bold text-white flex items-center gap-2 mb-3">
-            <Clock className="w-4 h-4 text-[#14B8A6]" /> Operating Hours (
-            {user.timezone})
-          </h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="p-3 rounded-xl bg-[#14B8A6]/15 text-[#14B8A6]">
+                <Calendar className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-white">
+                    Google Calendar Sync
+                  </h3>
+                  {user.googleCalendarConnected && (
+                    <Badge variant="success">Connected</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  {user.googleCalendarConnected
+                    ? `Bookings are checked against and created in ${user.calendarEmail || "your calendar"}.`
+                    : "Let your AI read free/busy slots to prevent double-bookings and create events for every booking."}
+                </p>
+                {gcalBanner && (
+                  <p className="text-xs text-[#2DD4BF] mt-2">{gcalBanner}</p>
+                )}
+                {googleAuthError && (
+                  <p className="text-xs text-rose-400 mt-2">{googleAuthError}</p>
+                )}
+              </div>
+            </div>
+            {user.googleCalendarConnected ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDisconnectGoogle}
+              >
+                Disconnect
+              </Button>
+            ) : (
+              <Button
+                variant="secondary"
+                onClick={() => connectGoogleCalendar(user.id)}
+                isLoading={isConnectingGoogle}
+              >
+                Connect Google Calendar
+              </Button>
+            )}
+          </div>
+        </Card>
+
+        <Card>
+          <div className="mb-3">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[#14B8A6]" /> Operating Hours (
+              {user.timezone})
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Changes save to PostgreSQL and update your live Vapi prompt.
+            </p>
+          </div>
           <div className="divide-y divide-slate-800/60 text-xs">
             {user.operatingHours.map((h) => (
               <div
                 key={h.day}
-                className="py-2 flex items-center justify-between"
+                className="py-2.5 flex flex-wrap items-center justify-between gap-2"
               >
-                <span className="text-slate-300 font-medium">{h.day}</span>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!h.isClosed}
+                    onChange={(e) => {
+                      updateAdminOperatingHour(h.day, {
+                        isClosed: !e.target.checked,
+                      });
+                      showSaved(
+                        `${h.day} marked ${
+                          e.target.checked ? "open" : "closed"
+                        } in live AI schedule.`
+                      );
+                    }}
+                    className="w-3.5 h-3.5 rounded border-slate-700 bg-slate-900 accent-[#14B8A6] cursor-pointer"
+                  />
+                  <span
+                    className={
+                      h.isClosed
+                        ? "text-slate-500 line-through font-medium"
+                        : "text-slate-200 font-medium"
+                    }
+                  >
+                    {h.day}
+                  </span>
+                </label>
                 {h.isClosed ? (
                   <Badge variant="default">Closed</Badge>
                 ) : (
-                  <span className="font-mono text-slate-400">
-                    {h.openTime} – {h.closeTime}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="time"
+                      value={h.openTime}
+                      aria-label={`${h.day} opening time`}
+                      onChange={(e) => {
+                        updateAdminOperatingHour(h.day, {
+                          openTime: e.target.value,
+                        });
+                        showSaved(`Updated ${h.day} opening hours.`);
+                      }}
+                      className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white focus:border-[#14B8A6] focus:outline-none"
+                    />
+                    <span className="text-slate-500">to</span>
+                    <input
+                      type="time"
+                      value={h.closeTime}
+                      aria-label={`${h.day} closing time`}
+                      onChange={(e) => {
+                        updateAdminOperatingHour(h.day, {
+                          closeTime: e.target.value,
+                        });
+                        showSaved(`Updated ${h.day} closing hours.`);
+                      }}
+                      className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white focus:border-[#14B8A6] focus:outline-none"
+                    />
+                  </div>
                 )}
               </div>
             ))}
@@ -1587,7 +1818,10 @@ export const AdminLoginPage: React.FC = () => {
 export const AdminPortal: React.FC = () => {
   const {
     user,
+    agents,
+    vapiSyncStatus,
     isAuthenticated,
+    selectAgent,
     toggleAgentActive,
     simulateIncomingCall,
     switchDemoTenant,
@@ -1627,9 +1861,12 @@ export const AdminPortal: React.FC = () => {
     }, 1400);
   };
 
-  const currentTenantKey = user.businessName.toLowerCase().includes("dental")
-    ? "clinic"
-    : "salon";
+  const isRealAgentSelected = agents.some((a) => a.id === user.id);
+  const currentSelectValue = isRealAgentSelected
+    ? user.id
+    : user.id === "ag_demo_clinic" || user.businessName.toLowerCase().includes("dental")
+    ? "preset:clinic"
+    : "preset:salon";
 
   const navItems: {
     id: AdminTabType;
@@ -1652,19 +1889,45 @@ export const AdminPortal: React.FC = () => {
             <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl">
               <Building2 className="w-4 h-4 text-[#14B8A6]" />
               <select
-                value={currentTenantKey}
-                onChange={(e) =>
-                  switchDemoTenant(e.target.value as "salon" | "clinic")
-                }
-                aria-label="Switch Demo Business Tenant"
+                value={currentSelectValue}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val.startsWith("preset:")) {
+                    switchDemoTenant(
+                      val.replace("preset:", "") as "salon" | "clinic"
+                    );
+                  } else {
+                    selectAgent(val);
+                  }
+                }}
+                aria-label="Switch AI Agent Workspace"
                 className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer"
               >
-                <option value="salon" className="bg-slate-900 text-white">
-                  Luxe Hair & Color Lounge (Salon)
-                </option>
-                <option value="clinic" className="bg-slate-900 text-white">
-                  Apex Family Dental & Wellness (Clinic)
-                </option>
+                <optgroup
+                  label="Your Provisioned AI Agents"
+                  className="bg-slate-900 text-slate-400"
+                >
+                  {agents.map((ag) => (
+                    <option
+                      key={ag.id}
+                      value={ag.id}
+                      className="bg-slate-900 text-white"
+                    >
+                      {ag.businessName} ({ag.industry})
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup
+                  label="Demo Presets"
+                  className="bg-slate-900 text-slate-400"
+                >
+                  <option value="preset:salon" className="bg-slate-900 text-white">
+                    Demo: Luxe Hair Salon
+                  </option>
+                  <option value="preset:clinic" className="bg-slate-900 text-white">
+                    Demo: Apex Dental Clinic
+                  </option>
+                </optgroup>
               </select>
             </div>
 
@@ -1688,6 +1951,23 @@ export const AdminPortal: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            {vapiSyncStatus !== "idle" && (
+              <Badge
+                variant={
+                  vapiSyncStatus === "synced"
+                    ? "success"
+                    : vapiSyncStatus === "failed"
+                    ? "warning"
+                    : "default"
+                }
+              >
+                {vapiSyncStatus === "syncing"
+                  ? "Syncing to Vapi..."
+                  : vapiSyncStatus === "synced"
+                  ? "Synced to Vapi"
+                  : "Saved to DB (Vapi sync offline)"}
+              </Badge>
+            )}
             <button
               onClick={toggleAgentActive}
               className={cn(

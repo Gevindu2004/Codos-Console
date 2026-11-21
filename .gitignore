@@ -27,6 +27,7 @@ src/config/env.ts
 *env.mjs
 envConfig.ts
 envConfig.js
+docs
 
 # =====================================================================
 # 2. CRYPTOGRAPHIC KEYS, CERTIFICATES, TOKENS & CREDENTIALS
