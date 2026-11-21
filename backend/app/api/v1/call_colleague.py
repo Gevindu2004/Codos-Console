@@ -1,3 +1,4 @@
+from datetime import datetime
 import hashlib
 import json
 import random
@@ -8,7 +9,7 @@ from typing import Any, Optional
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -24,11 +25,13 @@ from app.models.call_colleague import (
     CcTenant,
     CcVoiceApiKey,
 )
+from app.services import booking_tools, google_calendar
 from app.services.vapi_service import (
     bind_vapi_phone_number,
     build_vapi_assistant_dto,
     create_vapi_assistant,
     delete_vapi_assistant,
+    fetch_vapi_calls,
     update_vapi_assistant,
 )
 
@@ -241,8 +244,8 @@ async def provision_agent(request: Request, db: AsyncSession = Depends(get_db)):
         selected_carrier_id=payload.get("selectedCarrierId", "dialog_sl"),
         is_number_verified=bool(payload.get("isNumberVerified", False)),
         sip_config=sip_cfg,
-        google_calendar_connected=bool(payload.get("googleCalendarConnected", False)),
-        calendar_email=payload.get("calendarEmail", ""),
+        google_calendar_connected=False,  # only true after a real OAuth connect
+        calendar_email="",
     )
     db.add(tenant)
     await db.flush()
@@ -397,11 +400,15 @@ async def update_agent(
                 )
             )
 
+    tenant_id = tenant.id
     await db.commit()
+    db.expire_all()
 
     # Reload with fresh relations and push updated Brain to Vapi
-    refreshed = await _find_tenant(db, agent_id=tenant.id)
-    serialized = _serialize_tenant(refreshed or tenant)
+    refreshed = await _find_tenant(db, agent_id=tenant_id)
+    if not refreshed:
+        raise HTTPException(status_code=404, detail="Agent not found after update")
+    serialized = _serialize_tenant(refreshed)
     webhook_url = f"{settings.APP_PUBLIC_URL.rstrip('/')}{settings.API_V1_STR}/webhooks/call-colleague"
     assistant_dto = build_vapi_assistant_dto(serialized, webhook_url)
     vapi_synced = await update_vapi_assistant(
@@ -434,8 +441,11 @@ async def vapi_webhook_receiver(
     x_vapi_secret: Optional[str] = Header(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    if settings.VAPI_WEBHOOK_SECRET and x_vapi_secret:
-        if x_vapi_secret != settings.VAPI_WEBHOOK_SECRET:
+    # Secret is mandatory whenever one is configured (constant-time compare).
+    if settings.VAPI_WEBHOOK_SECRET:
+        if not x_vapi_secret or not secrets.compare_digest(
+            x_vapi_secret, settings.VAPI_WEBHOOK_SECRET
+        ):
             raise HTTPException(status_code=401, detail="Invalid webhook secret")
 
     body = await request.json()
@@ -449,11 +459,22 @@ async def vapi_webhook_receiver(
     inbound_number = (call_obj.get("phoneNumber") or {}).get("number")
 
     tenant = await _find_tenant(db, agent_id=assistant_id, phone_number=inbound_number)
+    # Never fall back to another tenant: an unmatched call must not touch any client's data.
     if not tenant:
-        first_res = await db.execute(
-            select(CcTenant).options(*_tenant_load_options()).limit(1)
-        )
-        tenant = first_res.scalar_one_or_none()
+        if msg_type == "tool-calls":
+            tool_calls = message.get("toolCallList") or message.get("toolCalls") or []
+            return {
+                "results": [
+                    {
+                        "toolCallId": tc.get("id", ""),
+                        "result": json.dumps(
+                            {"success": False, "message": "This business is not configured. Apologise and offer to take a message."}
+                        ),
+                    }
+                    for tc in tool_calls
+                ]
+            }
+        return {"ok": True, "ignored": "unknown tenant"}
 
     if msg_type == "assistant-request":
         if tenant and not tenant.agent_active:
@@ -481,68 +502,16 @@ async def vapi_webhook_receiver(
             else:
                 args = {}
 
+            customer = call_obj.get("customer") or {}
             if fn_name == "check_calendar_availability":
-                requested_date = str(args.get("date") or "Tomorrow")
-                appts_res = await db.execute(
-                    select(CcAppointment).where(
-                        CcAppointment.tenant_id == tenant.id,
-                        CcAppointment.status != "cancelled",
-                    )
-                )
-                taken_slots = [
-                    a.date_time
-                    for a in appts_res.scalars().all()
-                    if requested_date.lower() in a.date_time.lower()
-                ]
-                candidates = [
-                    slot
-                    for slot in ("10:00 AM", "11:30 AM", "2:00 PM", "4:15 PM")
-                    if not any(slot in taken for taken in taken_slots)
-                ]
-                results.append(
-                    {
-                        "toolCallId": tc_id,
-                        "result": (
-                            f"Available slots on {requested_date}: {', '.join(candidates)}."
-                            if candidates
-                            else f"No open slots left on {requested_date}. Suggest the next business day."
-                        ),
-                    }
-                )
+                out = await booking_tools.check_availability(db, tenant, args)
             elif fn_name == "book_appointment":
-                service_name = str(args.get("serviceName") or "Consultation")
-                matched = next(
-                    (s for s in tenant.services if s.name.lower() == service_name.lower()),
-                    None,
-                )
-                customer = call_obj.get("customer") or {}
-                new_appt = CcAppointment(
-                    id=f"apt_{int(time.time() * 1000)}",
-                    tenant_id=tenant.id,
-                    client_name=str(args.get("clientName") or customer.get("name") or "Phone Caller"),
-                    client_phone=str(args.get("clientPhone") or customer.get("number") or "Unknown"),
-                    service_name=matched.name if matched else service_name,
-                    staff_member=str(
-                        args.get("staffMember")
-                        or (matched.staff_member if matched else None)
-                        or "Available Specialist"
-                    ),
-                    date_time=str(args.get("dateTime") or "Tomorrow, 2:00 PM"),
-                    duration_minutes=matched.duration_minutes if matched else 45,
-                    price=float(matched.price) if matched else 75.0,
-                    status="confirmed",
-                    booked_via="AI Voice Receptionist",
-                )
-                db.add(new_appt)
-                await db.commit()
-                results.append(
-                    {
-                        "toolCallId": tc_id,
-                        "result": f"Appointment confirmed (ID {new_appt.id}) for {new_appt.client_name} - {new_appt.service_name} at {new_appt.date_time}.",
-                    }
-                )
+                out = await booking_tools.book_appointment(db, tenant, args, customer)
+            elif fn_name == "cancel_appointment":
+                out = await booking_tools.cancel_appointment(db, tenant, args, customer)
             else:
-                results.append({"toolCallId": tc_id, "result": "Tool executed successfully."})
+                out = {"success": False, "message": f"Unknown tool: {fn_name}"}
+            results.append({"toolCallId": tc_id, "result": json.dumps(out)})
 
         return {"results": results}
 
@@ -613,10 +582,159 @@ async def vapi_webhook_receiver(
 # ---------------------------------------------------------------------------
 # 3. Call Logs, Appointments, OTP & Scoped Voice API Keys
 # ---------------------------------------------------------------------------
+def _compute_call_duration_seconds(vc: dict[str, Any]) -> int:
+    if vc.get("durationSeconds") is not None:
+        try:
+            return max(0, round(float(vc["durationSeconds"])))
+        except (TypeError, ValueError):
+            pass
+    started_raw = vc.get("startedAt")
+    ended_raw = vc.get("endedAt")
+    if started_raw and ended_raw:
+        try:
+            s_dt = datetime.fromisoformat(str(started_raw).replace("Z", "+00:00"))
+            e_dt = datetime.fromisoformat(str(ended_raw).replace("Z", "+00:00"))
+            return max(0, round((e_dt - s_dt).total_seconds()))
+        except ValueError:
+            pass
+    return 60
+
+
+async def _sync_vapi_calls_for_tenant(db: AsyncSession, tenant: CcTenant) -> None:
+    """Pull completed calls from Vapi REST API and upsert missing rows into cc_call_logs."""
+    assistant_id = tenant.vapi_assistant_id
+    if (
+        not assistant_id
+        or assistant_id.startswith("ag_demo_")
+        or assistant_id.startswith("usr_")
+    ):
+        return
+
+    raw_calls = await fetch_vapi_calls(assistant_id, limit=15)
+    if not raw_calls:
+        return
+
+    added = False
+    for vc in raw_calls:
+        if vc.get("status") != "ended" and not vc.get("endedAt"):
+            continue
+        call_id = vc.get("id")
+        if not call_id:
+            continue
+
+        existing = await db.execute(
+            select(CcCallLog.id).where(
+                or_(CcCallLog.id == call_id, CcCallLog.vapi_call_id == call_id)
+            )
+        )
+        if existing.scalar_one_or_none():
+            continue
+
+        duration_sec = _compute_call_duration_seconds(vc)
+        mins, secs = divmod(duration_sec, 60)
+
+        artifact = vc.get("artifact") or {}
+        analysis = vc.get("analysis") or {}
+        raw_msgs = artifact.get("messages") or vc.get("messages") or []
+        if raw_msgs:
+            transcript = [
+                {
+                    "role": "user" if m.get("role") == "user" else "agent",
+                    "text": str(m.get("message") or m.get("content") or ""),
+                }
+                for m in raw_msgs
+                if m.get("role") in ("assistant", "bot", "user")
+                and str(m.get("message") or m.get("content") or "").strip()
+            ]
+        else:
+            transcript = [
+                {
+                    "role": "user" if line.lower().startswith("user") else "agent",
+                    "text": line.split(":", 1)[-1].strip(),
+                }
+                for line in str(artifact.get("transcript") or vc.get("transcript") or "").splitlines()
+                if line.strip()
+            ]
+
+        summary = str(
+            analysis.get("summary")
+            or vc.get("summary")
+            or artifact.get("summary")
+            or "Live Vapi voice call handled by AI receptionist."
+        )
+        lower_sum = summary.lower()
+        call_status = (
+            "transferred"
+            if "transfer" in lower_sum
+            else "booked"
+            if ("book" in lower_sum or "confirm" in lower_sum)
+            else "missed"
+            if vc.get("endedReason") == "customer-did-not-answer"
+            else "completed"
+        )
+
+        customer = vc.get("customer") or {}
+        caller_phone = customer.get("number") or (
+            "WebRTC Browser Call" if vc.get("type") == "webCall" else "Inbound Caller"
+        )
+        caller_name = customer.get("name") or (
+            "Web Test Caller" if vc.get("type") == "webCall" else "Inbound Caller"
+        )
+        recording_url = artifact.get("recordingUrl") or vc.get("recordingUrl")
+
+        ts_label = "Synced from Vapi"
+        ended_raw = vc.get("endedAt") or vc.get("createdAt")
+        if ended_raw:
+            try:
+                ended_dt = datetime.fromisoformat(str(ended_raw).replace("Z", "+00:00"))
+                ts_label = ended_dt.strftime("%b %d, %H:%M UTC")
+            except ValueError:
+                pass
+
+        db.add(
+            CcCallLog(
+                id=str(call_id)[:64],
+                tenant_id=tenant.id,
+                vapi_call_id=str(call_id)[:100],
+                caller_name=str(caller_name)[:160],
+                caller_phone=str(caller_phone)[:40],
+                timestamp_label=ts_label[:80],
+                duration=f"{mins}m {secs:02d}s",
+                status=call_status,
+                sentiment="urgent" if "urgent" in lower_sum else "positive",
+                summary=summary,
+                recording_url=recording_url,
+                transcript=transcript,
+            )
+        )
+        added = True
+
+    if added:
+        await db.commit()
+
+
 @router.get("/calls")
 async def list_calls(
     tenantId: Optional[str] = Query(default=None), db: AsyncSession = Depends(get_db)
 ):
+    target_tenant = None
+    if tenantId:
+        target_tenant = await _find_tenant(db, agent_id=tenantId)
+    else:
+        latest_res = await db.execute(
+            select(CcTenant)
+            .options(*_tenant_load_options())
+            .order_by(CcTenant.created_at.desc())
+            .limit(1)
+        )
+        target_tenant = latest_res.scalar_one_or_none()
+
+    if target_tenant:
+        try:
+            await _sync_vapi_calls_for_tenant(db, target_tenant)
+        except Exception:
+            pass
+
     stmt = select(CcCallLog).order_by(CcCallLog.created_at.desc())
     if tenantId:
         stmt = stmt.where(CcCallLog.tenant_id == tenantId)
@@ -861,3 +979,64 @@ async def revoke_voice_key(id: str = Query(...), db: AsyncSession = Depends(get_
     await db.execute(delete(CcVoiceApiKey).where(CcVoiceApiKey.id == id))
     await db.commit()
     return {"revoked": True, "id": id}
+
+
+# ---------------------------------------------------------------------------
+# Google Calendar OAuth (per-tenant)
+# ---------------------------------------------------------------------------
+@router.get("/integrations/google/connect")
+async def google_calendar_connect(agentId: str, db: AsyncSession = Depends(get_db)):
+    if not google_calendar.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in backend/.env.",
+        )
+    tenant = await _find_tenant(db, agent_id=agentId)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return {"authUrl": google_calendar.build_auth_url(tenant.id)}
+
+
+@router.get("/integrations/google/callback")
+async def google_calendar_callback(
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    from fastapi.responses import RedirectResponse
+
+    back = settings.FRONTEND_URL.rstrip("/")
+    if error or not code or not state:
+        return RedirectResponse(f"{back}/console?gcal=error")
+
+    tenant = await _find_tenant(db, agent_id=state)
+    if not tenant:
+        return RedirectResponse(f"{back}/console?gcal=error")
+    try:
+        tokens = await google_calendar.exchange_code(code)
+        refresh = tokens.get("refresh_token")
+        if not refresh:
+            return RedirectResponse(f"{back}/console?gcal=error")
+        email = await google_calendar.fetch_account_email(tokens["access_token"])
+        await google_calendar.save_integration(db, tenant.id, refresh, email)
+        tenant.google_calendar_connected = True
+        tenant.calendar_email = email or ""
+        await db.commit()
+    except Exception:
+        return RedirectResponse(f"{back}/console?gcal=error")
+    return RedirectResponse(f"{back}/console?gcal=connected&agentId={tenant.id}")
+
+
+@router.delete("/integrations/google/{agent_id}")
+async def google_calendar_disconnect(agent_id: str, db: AsyncSession = Depends(get_db)):
+    tenant = await _find_tenant(db, agent_id=agent_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    integ = await google_calendar.get_integration(db, tenant.id)
+    if integ:
+        await db.delete(integ)
+    tenant.google_calendar_connected = False
+    tenant.calendar_email = ""
+    await db.commit()
+    return {"disconnected": True}

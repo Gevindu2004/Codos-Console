@@ -78,14 +78,19 @@ export interface OnboardingStoreState {
   resetWizard: () => void;
 }
 
+export type VapiSyncStatus = "idle" | "syncing" | "synced" | "failed";
+
 export interface AdminStoreState {
   user: AdminUser | null;
+  agents: AdminUser[];
+  vapiSyncStatus: VapiSyncStatus;
   isAuthenticated: boolean;
   callLogs: CallLogItem[];
   appointments: AppointmentItem[];
 
   login: (email: string, businessName?: string) => void;
   logout: () => void;
+  selectAgent: (agentId: string) => void;
   toggleAgentActive: () => void;
   updateUser: (updates: Partial<AdminUser>) => void;
   setAdminVoicePersona: (persona: VoicePersona) => void;
@@ -104,6 +109,10 @@ export interface AdminStoreState {
   addAdminFaq: (faq: KnowledgeFAQ) => void;
   updateAdminFaq: (id: string, updates: Partial<KnowledgeFAQ>) => void;
   removeAdminFaq: (id: string) => void;
+  updateAdminOperatingHour: (
+    day: string,
+    updates: Partial<OperatingHour>
+  ) => void;
 
   updateAppointmentStatus: (
     id: string,
@@ -121,16 +130,6 @@ export interface NavigationContextValue {
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
-
-function syncTenantToBackend(tenantId: string, updates: Partial<AdminUser>): void {
-  fetch(`${API_BASE_URL}/agents/${encodeURIComponent(tenantId)}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(updates),
-  }).catch((err) => {
-    console.warn("[CallColleague] Background tenant sync failed:", err);
-  });
-}
 
 const initialTemplate = INDUSTRY_TEMPLATES.salon;
 
@@ -207,45 +206,91 @@ export const CallColleagueProvider: React.FC<{
 
   // Admin Store State
   const [user, setUser] = useState<AdminUser | null>(DEFAULT_ADMIN_USER);
+  const [agents, setAgents] = useState<AdminUser[]>([DEFAULT_ADMIN_USER]);
+  const [vapiSyncStatus, setVapiSyncStatus] = useState<VapiSyncStatus>("idle");
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
   const [callLogs, setCallLogs] = useState<CallLogItem[]>(MOCK_CALL_LOGS);
   const [appointments, setAppointments] =
     useState<AppointmentItem[]>(MOCK_APPOINTMENTS);
 
+  const loadTenantActivity = async (tenantId: string, isCancelled?: () => boolean) => {
+    const [callsRes, apptsRes] = await Promise.all([
+      fetch(`${API_BASE_URL}/calls?tenantId=${encodeURIComponent(tenantId)}`),
+      fetch(`${API_BASE_URL}/appointments?tenantId=${encodeURIComponent(tenantId)}`),
+    ]);
+    if (isCancelled?.()) return;
+    if (callsRes.ok) {
+      const callsData = (await callsRes.json()) as { calls?: CallLogItem[] };
+      if (Array.isArray(callsData.calls)) {
+        setCallLogs(callsData.calls);
+      }
+    }
+    if (apptsRes.ok) {
+      const apptsData = (await apptsRes.json()) as {
+        appointments?: AppointmentItem[];
+      };
+      if (Array.isArray(apptsData.appointments)) {
+        setAppointments(apptsData.appointments);
+      }
+    }
+  };
+
+  const pushTenantUpdates = (tenantId: string, updates: Partial<AdminUser>) => {
+    setVapiSyncStatus("syncing");
+    fetch(`${API_BASE_URL}/agents/${encodeURIComponent(tenantId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          setVapiSyncStatus("failed");
+          return;
+        }
+        const data = (await res.json()) as {
+          tenant?: AdminUser;
+          vapiSynced?: boolean;
+        };
+        if (data.tenant) {
+          setAgents((prev) =>
+            prev.some((a) => a.id === data.tenant!.id)
+              ? prev.map((a) => (a.id === data.tenant!.id ? data.tenant! : a))
+              : [data.tenant!, ...prev]
+          );
+        }
+        setVapiSyncStatus(data.vapiSynced ? "synced" : "failed");
+      })
+      .catch((err) => {
+        console.warn("[CallColleague] Tenant sync failed:", err);
+        setVapiSyncStatus("failed");
+      });
+  };
+
   useEffect(() => {
     let active = true;
     const loadPersistedState = async () => {
       try {
-        const [callsRes, apptsRes, agentsRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/calls`),
-          fetch(`${API_BASE_URL}/appointments`),
-          fetch(`${API_BASE_URL}/agents`),
-        ]);
+        const agentsRes = await fetch(`${API_BASE_URL}/agents`);
         if (!active) return;
+        let selectedId = DEFAULT_ADMIN_USER.id;
         if (agentsRes.ok) {
           const agentsData = (await agentsRes.json()) as {
             agents?: AdminUser[];
           };
           if (Array.isArray(agentsData.agents) && agentsData.agents.length > 0) {
-            setUser(agentsData.agents[0]);
+            setAgents(agentsData.agents);
+            const urlAgentId =
+              typeof window !== "undefined"
+                ? new URLSearchParams(window.location.search).get("agentId")
+                : null;
+            const picked =
+              (urlAgentId && agentsData.agents.find((a) => a.id === urlAgentId)) ||
+              agentsData.agents[0];
+            setUser(picked);
+            selectedId = picked.id;
           }
         }
-        if (callsRes.ok) {
-          const callsData = (await callsRes.json()) as {
-            calls?: CallLogItem[];
-          };
-          if (Array.isArray(callsData.calls)) {
-            setCallLogs(callsData.calls);
-          }
-        }
-        if (apptsRes.ok) {
-          const apptsData = (await apptsRes.json()) as {
-            appointments?: AppointmentItem[];
-          };
-          if (Array.isArray(apptsData.appointments)) {
-            setAppointments(apptsData.appointments);
-          }
-        }
+        await loadTenantActivity(selectedId, () => !active);
       } catch {
         // Keep seeded defaults if API routes are unavailable
       }
@@ -356,6 +401,8 @@ export const CallColleagueProvider: React.FC<{
 
   const adminValue: AdminStoreState = {
     user,
+    agents,
+    vapiSyncStatus,
     isAuthenticated,
     callLogs,
     appointments,
@@ -379,22 +426,41 @@ export const CallColleagueProvider: React.FC<{
 
     logout: () => setIsAuthenticated(false),
 
+    selectAgent: (agentId) => {
+      const found = agents.find((a) => a.id === agentId);
+      if (found) {
+        setUser(found);
+        setVapiSyncStatus("idle");
+        void loadTenantActivity(agentId).catch(() => {});
+      }
+    },
+
     toggleAgentActive: () => {
       if (!user) return;
       const nextActive = !user.agentActive;
       setUser((prev) =>
         prev ? { ...prev, agentActive: nextActive } : null
       );
-      syncTenantToBackend(user.id, { agentActive: nextActive });
+      pushTenantUpdates(user.id, { agentActive: nextActive });
     },
 
-    updateUser: (updates) =>
-      setUser((prev) => (prev ? { ...prev, ...updates } : null)),
+    updateUser: (updates) => {
+      setUser((prev) => {
+        if (!prev) return null;
+        const merged = { ...prev, ...updates };
+        setAgents((list) =>
+          list.some((a) => a.id === merged.id)
+            ? list.map((a) => (a.id === merged.id ? merged : a))
+            : [merged, ...list]
+        );
+        return merged;
+      });
+    },
 
     setAdminVoicePersona: (persona) => {
       setUser((prev) => (prev ? { ...prev, voicePersona: persona } : null));
       if (user) {
-        syncTenantToBackend(user.id, { voicePersona: persona });
+        pushTenantUpdates(user.id, { voicePersona: persona });
       }
     },
 
@@ -402,7 +468,7 @@ export const CallColleagueProvider: React.FC<{
       if (!user) return;
       const nextServices = [...user.services, service];
       setUser((prev) => (prev ? { ...prev, services: nextServices } : null));
-      syncTenantToBackend(user.id, { services: nextServices });
+      pushTenantUpdates(user.id, { services: nextServices });
     },
 
     updateAdminService: (id, updates) => {
@@ -411,14 +477,14 @@ export const CallColleagueProvider: React.FC<{
         s.id === id ? { ...s, ...updates } : s
       );
       setUser((prev) => (prev ? { ...prev, services: nextServices } : null));
-      syncTenantToBackend(user.id, { services: nextServices });
+      pushTenantUpdates(user.id, { services: nextServices });
     },
 
     removeAdminService: (id) => {
       if (!user) return;
       const nextServices = user.services.filter((s) => s.id !== id);
       setUser((prev) => (prev ? { ...prev, services: nextServices } : null));
-      syncTenantToBackend(user.id, { services: nextServices });
+      pushTenantUpdates(user.id, { services: nextServices });
     },
 
     addAdminDepartment: (dept) => {
@@ -427,7 +493,7 @@ export const CallColleagueProvider: React.FC<{
       setUser((prev) =>
         prev ? { ...prev, departments: nextDepartments } : null
       );
-      syncTenantToBackend(user.id, { departments: nextDepartments });
+      pushTenantUpdates(user.id, { departments: nextDepartments });
     },
 
     updateAdminDepartment: (id, updates) => {
@@ -438,7 +504,7 @@ export const CallColleagueProvider: React.FC<{
       setUser((prev) =>
         prev ? { ...prev, departments: nextDepartments } : null
       );
-      syncTenantToBackend(user.id, { departments: nextDepartments });
+      pushTenantUpdates(user.id, { departments: nextDepartments });
     },
 
     removeAdminDepartment: (id) => {
@@ -447,7 +513,7 @@ export const CallColleagueProvider: React.FC<{
       setUser((prev) =>
         prev ? { ...prev, departments: nextDepartments } : null
       );
-      syncTenantToBackend(user.id, { departments: nextDepartments });
+      pushTenantUpdates(user.id, { departments: nextDepartments });
     },
 
     addAdminFaq: (faq) => {
@@ -456,7 +522,7 @@ export const CallColleagueProvider: React.FC<{
       setUser((prev) =>
         prev ? { ...prev, knowledgeFaqs: nextFaqs } : null
       );
-      syncTenantToBackend(user.id, { knowledgeFaqs: nextFaqs });
+      pushTenantUpdates(user.id, { knowledgeFaqs: nextFaqs });
     },
 
     updateAdminFaq: (id, updates) => {
@@ -467,7 +533,7 @@ export const CallColleagueProvider: React.FC<{
       setUser((prev) =>
         prev ? { ...prev, knowledgeFaqs: nextFaqs } : null
       );
-      syncTenantToBackend(user.id, { knowledgeFaqs: nextFaqs });
+      pushTenantUpdates(user.id, { knowledgeFaqs: nextFaqs });
     },
 
     removeAdminFaq: (id) => {
@@ -476,7 +542,18 @@ export const CallColleagueProvider: React.FC<{
       setUser((prev) =>
         prev ? { ...prev, knowledgeFaqs: nextFaqs } : null
       );
-      syncTenantToBackend(user.id, { knowledgeFaqs: nextFaqs });
+      pushTenantUpdates(user.id, { knowledgeFaqs: nextFaqs });
+    },
+
+    updateAdminOperatingHour: (day, updates) => {
+      if (!user) return;
+      const nextHours = user.operatingHours.map((h) =>
+        h.day === day ? { ...h, ...updates } : h
+      );
+      setUser((prev) =>
+        prev ? { ...prev, operatingHours: nextHours } : null
+      );
+      pushTenantUpdates(user.id, { operatingHours: nextHours });
     },
 
     updateAppointmentStatus: (id, status) => {
@@ -612,8 +689,10 @@ export const CallColleagueProvider: React.FC<{
         VOICE_PERSONAS[0];
 
       setIsAuthenticated(true);
+      setVapiSyncStatus("idle");
       setUser((prev) => ({
         ...(prev || DEFAULT_ADMIN_USER),
+        id: preset === "clinic" ? "ag_demo_clinic" : "ag_demo_salon",
         businessName: data.businessName,
         industry: data.industry,
         virtualPhoneNumber: data.phone,

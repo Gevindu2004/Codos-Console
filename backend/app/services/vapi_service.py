@@ -1,4 +1,6 @@
+import logging
 import re
+from pathlib import Path
 from typing import Any, Optional
 
 import httpx
@@ -18,6 +20,7 @@ from app.models.call_colleague import (
 )
 
 VAPI_BASE_URL = "https://api.vapi.ai"
+logger = logging.getLogger("call_colleague.vapi")
 
 
 def normalize_e164(phone: str, timezone: Optional[str] = None) -> Optional[str]:
@@ -108,7 +111,7 @@ def compile_system_prompt(payload: dict[str, Any]) -> str:
         for d in departments
     ) or "- No warm-transfer lines configured."
 
-    return f"""You are {persona_name}, the 24/7 autonomous AI voice receptionist for "{business_name}" (Industry: {industry}).
+    prompt = f"""You are {persona_name}, the 24/7 autonomous AI voice receptionist for "{business_name}" (Industry: {industry}).
 Your voice style and tone: {persona_tone}.
 Business Timezone: {timezone}.
 
@@ -130,7 +133,18 @@ Business Timezone: {timezone}.
 3. Never book an appointment on a day marked CLOSED or outside operating hours.
 4. Before booking, always run "check_calendar_availability" first to verify open slots.
 5. Once the caller picks an available time, collect their full name and phone number, then call "book_appointment".
-6. If a caller matches any Call Transfer condition above, inform them politely and invoke the "transferCall" tool immediately."""
+6. If a caller matches any Call Transfer condition above, inform them politely and invoke the "transferCall" tool immediately.
+7. To cancel, call "cancel_appointment" with commit=false, read the details back, and only call it again with commit=true after the caller confirms.
+8. If a tool returns success=false, follow its message; never claim a booking succeeded unless success=true."""
+
+    try:
+        (Path(__file__).resolve().parents[3] / "PROMPT.TXT").write_text(
+            prompt, encoding="utf-8"
+        )
+    except Exception:
+        pass
+
+    return prompt
 
 
 def build_vapi_assistant_dto(
@@ -199,10 +213,27 @@ def build_vapi_assistant_dto(
                         "clientName": {"type": "string", "description": "Caller full name."},
                         "clientPhone": {"type": "string", "description": "Caller callback phone number."},
                         "serviceName": service_schema,
-                        "dateTime": {"type": "string", "description": "Confirmed date and time (e.g., 'Tomorrow, 2:00 PM')."},
+                        "dateTime": {"type": "string", "description": "Confirmed date and time, e.g. '2026-11-20 2:00 PM' or 'Friday 2:00 PM'."},
                         "staffMember": {"type": "string", "description": "Assigned staff member or specialist."},
                     },
                     "required": ["clientName", "serviceName", "dateTime"],
+                },
+            },
+        }
+    )
+
+    tools.append(
+        {
+            "type": "function",
+            "function": {
+                "name": "cancel_appointment",
+                "description": "Cancels the caller's upcoming appointment, found by their phone number. First call with commit=false to confirm details with the caller, then commit=true.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "clientPhone": {"type": "string", "description": "Caller phone number (optional, defaults to caller ID)."},
+                        "commit": {"type": "boolean", "description": "false = look up only, true = cancel."},
+                    },
                 },
             },
         }
@@ -265,16 +296,28 @@ async def update_vapi_assistant(assistant_id: str, dto: dict[str, Any]) -> bool:
     if not settings.VAPI_PRIVATE_API_KEY or not assistant_id or assistant_id.startswith("ag_demo_"):
         return False
 
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        res = await client.patch(
-            f"{VAPI_BASE_URL}/assistant/{assistant_id}",
-            headers={
-                "Authorization": f"Bearer {settings.VAPI_PRIVATE_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json=dto,
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            res = await client.patch(
+                f"{VAPI_BASE_URL}/assistant/{assistant_id}",
+                headers={
+                    "Authorization": f"Bearer {settings.VAPI_PRIVATE_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=dto,
+            )
+    except Exception as exc:
+        logger.error("Vapi assistant sync failed for %s: %s", assistant_id, exc)
+        return False
+    if res.status_code >= 400:
+        logger.error(
+            "Vapi assistant sync rejected for %s (%s): %s",
+            assistant_id,
+            res.status_code,
+            res.text[:500],
         )
-    return res.status_code < 400
+        return False
+    return True
 
 
 async def delete_vapi_assistant(assistant_id: str) -> None:
@@ -291,33 +334,120 @@ async def delete_vapi_assistant(assistant_id: str) -> None:
 async def bind_vapi_phone_number(
     assistant_id: str, business_name: str
 ) -> Optional[dict[str, Any]]:
-    if not (
-        settings.VAPI_PRIVATE_API_KEY
-        and settings.TWILIO_ACCOUNT_SID
+    """Bind an inbound phone number to the given Vapi assistant.
+
+    Uses Twilio BYO number when Twilio credentials are present; otherwise reuses
+    an existing Vapi phone number on the account (free tier allows 1) or creates
+    a free Vapi number.
+    """
+    if not settings.VAPI_PRIVATE_API_KEY:
+        return None
+
+    headers = {
+        "Authorization": f"Bearer {settings.VAPI_PRIVATE_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    if (
+        settings.TWILIO_ACCOUNT_SID
         and settings.TWILIO_AUTH_TOKEN
         and settings.TWILIO_PHONE_NUMBER
     ):
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                res = await client.post(
+                    f"{VAPI_BASE_URL}/phone-number",
+                    headers=headers,
+                    json={
+                        "provider": "twilio",
+                        "number": settings.TWILIO_PHONE_NUMBER,
+                        "twilioAccountSid": settings.TWILIO_ACCOUNT_SID,
+                        "twilioAuthToken": settings.TWILIO_AUTH_TOKEN,
+                        "assistantId": assistant_id,
+                        "name": f"{business_name} Inbound Line"[:40],
+                    },
+                )
+            if res.status_code < 400:
+                return res.json()
+            logger.warning("Twilio phone number bind failed (%s): %s", res.status_code, res.text[:300])
+        except Exception as exc:
+            logger.warning("Twilio phone number bind error: %s", exc)
         return None
 
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        res = await client.post(
-            f"{VAPI_BASE_URL}/phone-number",
-            headers={
-                "Authorization": f"Bearer {settings.VAPI_PRIVATE_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "provider": "twilio",
-                "number": settings.TWILIO_PHONE_NUMBER,
-                "twilioAccountSid": settings.TWILIO_ACCOUNT_SID,
-                "twilioAuthToken": settings.TWILIO_AUTH_TOKEN,
-                "assistantId": assistant_id,
-                "name": f"{business_name} Inbound Line",
-            },
-        )
-    if res.status_code < 400:
-        return res.json()
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            list_res = await client.get(
+                f"{VAPI_BASE_URL}/phone-number",
+                headers={"Authorization": f"Bearer {settings.VAPI_PRIVATE_API_KEY}"},
+            )
+            if list_res.status_code < 400:
+                existing = list_res.json()
+                if isinstance(existing, list) and len(existing) > 0:
+                    first_num = existing[0]
+                    phone_id = first_num.get("id")
+                    if phone_id:
+                        patch_res = await client.patch(
+                            f"{VAPI_BASE_URL}/phone-number/{phone_id}",
+                            headers=headers,
+                            json={
+                                "assistantId": assistant_id,
+                                "name": f"{business_name} Line"[:40],
+                            },
+                        )
+                        if patch_res.status_code < 400:
+                            return patch_res.json()
+                        logger.warning(
+                            "Vapi phone number rebind failed (%s): %s",
+                            patch_res.status_code,
+                            patch_res.text[:300],
+                        )
+                    return first_num
+
+            create_res = await client.post(
+                f"{VAPI_BASE_URL}/phone-number",
+                headers=headers,
+                json={
+                    "provider": "vapi",
+                    "assistantId": assistant_id,
+                    "name": f"{business_name} Line"[:40],
+                },
+            )
+            if create_res.status_code < 400:
+                return create_res.json()
+            logger.warning(
+                "Vapi free phone number creation failed (%s): %s",
+                create_res.status_code,
+                create_res.text[:300],
+            )
+    except Exception as exc:
+        logger.warning("Vapi phone number bind error: %s", exc)
     return None
+
+
+async def fetch_vapi_calls(assistant_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    """Fetch recent calls for a Vapi assistant via Vapi REST API."""
+    if (
+        not settings.VAPI_PRIVATE_API_KEY
+        or not assistant_id
+        or assistant_id.startswith("ag_demo_")
+        or assistant_id.startswith("usr_")
+    ):
+        return []
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            res = await client.get(
+                f"{VAPI_BASE_URL}/call",
+                params={"assistantId": assistant_id, "limit": limit},
+                headers={"Authorization": f"Bearer {settings.VAPI_PRIVATE_API_KEY}"},
+            )
+        if res.status_code < 400:
+            data = res.json()
+            if isinstance(data, list):
+                return data
+    except Exception as exc:
+        logger.warning("Vapi call fetch error for %s: %s", assistant_id, exc)
+    return []
 
 
 async def seed_call_colleague_defaults(db: AsyncSession) -> None:

@@ -178,9 +178,27 @@ class CcAppointment(Base):
     price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="confirmed")
     booked_via: Mapped[str] = mapped_column(String(64), nullable=False, default="AI Voice Receptionist")
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    gcal_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
     tenant: Mapped["CcTenant"] = relationship(back_populates="appointments")
+
+
+class CcTenantIntegration(Base):
+    """Encrypted per-tenant third-party credentials (Google Calendar OAuth)."""
+
+    __tablename__ = "cc_tenant_integrations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=generate_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        ForeignKey("cc_tenants.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, default="google_calendar")
+    encrypted_credentials: Mapped[str] = mapped_column(Text, nullable=False)
+    calendar_id: Mapped[str] = mapped_column(String(255), nullable=False, default="primary")
+    account_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
 
 class CcVoiceApiKey(Base):

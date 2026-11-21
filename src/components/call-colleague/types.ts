@@ -116,6 +116,8 @@ export interface AppointmentItem {
 
 export interface AdminUser {
   id: string;
+  googleCalendarConnected?: boolean;
+  calendarEmail?: string;
   email: string;
   businessName: string;
   industry: IndustryType;

@@ -459,90 +459,49 @@ export const api = {
   },
 };
 
+const CC_API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
+
+/**
+ * Real per-tenant Google Calendar OAuth (server-side code flow).
+ * The agent must already exist (provisioned) so the refresh token can be
+ * stored against its tenant. Google redirects back to /console?gcal=...
+ */
 export const useGoogleAuth = () => {
-  const { setGoogleCalendarConnected, setCalendarEmail } = useOnboardingStore();
   const [isConnecting, setIsConnecting] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  const connectGoogleCalendar = useCallback(() => {
+  const connectGoogleCalendar = useCallback(async (agentId: string) => {
     setIsConnecting(true);
     setAuthError(null);
-
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-    const isRealClientIdConfigured =
-      clientId &&
-      clientId !== "your_google_oauth_client_id.apps.googleusercontent.com" &&
-      clientId.includes(".apps.googleusercontent.com");
-
-    if (
-      isRealClientIdConfigured &&
-      typeof window !== "undefined" &&
-      (window as unknown as { google?: { accounts?: { oauth2?: { initTokenClient: (cfg: unknown) => { requestAccessToken: () => void } } } } }).google?.accounts?.oauth2
-    ) {
-      try {
-        const googleObj = (window as unknown as {
-          google: {
-            accounts: {
-              oauth2: {
-                initTokenClient: (cfg: {
-                  client_id: string;
-                  scope: string;
-                  callback: (resp: { error?: string; access_token?: string }) => void;
-                }) => { requestAccessToken: () => void };
-              };
-            };
-          };
-        }).google;
-
-        const tokenClient = googleObj.accounts.oauth2.initTokenClient({
-          client_id: clientId!,
-          scope:
-            "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email",
-          callback: async (response) => {
-            if (response.error) {
-              setAuthError("Google authentication cancelled or failed.");
-              setIsConnecting(false);
-              return;
-            }
-            if (response.access_token) {
-              try {
-                const userInfoRes = await fetch(
-                  "https://www.googleapis.com/oauth2/v3/userinfo",
-                  {
-                    headers: {
-                      Authorization: `Bearer ${response.access_token}`,
-                    },
-                  }
-                );
-                const userInfo = await userInfoRes.json();
-                setCalendarEmail(userInfo.email || "bookings@yourbusiness.com");
-                setGoogleCalendarConnected(true);
-              } catch {
-                setCalendarEmail("connected-calendar@gmail.com");
-                setGoogleCalendarConnected(true);
-              }
-            }
-            setIsConnecting(false);
-          },
-        });
-        tokenClient.requestAccessToken();
-        return;
-      } catch (err) {
-        console.warn("Falling back to simulated Google OAuth:", err);
+    try {
+      const res = await fetch(
+        `${CC_API_BASE}/integrations/google/connect?agentId=${encodeURIComponent(agentId)}`
+      );
+      const data = await res.json();
+      if (!res.ok || !data.authUrl) {
+        throw new Error(data.detail || "Could not start Google sign-in.");
       }
-    }
-
-    setTimeout(() => {
-      setCalendarEmail("reception.calendar@gmail.com");
-      setGoogleCalendarConnected(true);
+      window.location.href = data.authUrl;
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "Google sign-in failed.");
       setIsConnecting(false);
-    }, 1000);
-  }, [setCalendarEmail, setGoogleCalendarConnected]);
+    }
+  }, []);
 
-  const disconnectGoogleCalendar = useCallback(() => {
-    setGoogleCalendarConnected(false);
-    setCalendarEmail("");
-  }, [setCalendarEmail, setGoogleCalendarConnected]);
+  const disconnectGoogleCalendar = useCallback(async (agentId: string) => {
+    setAuthError(null);
+    try {
+      const res = await fetch(
+        `${CC_API_BASE}/integrations/google/${encodeURIComponent(agentId)}`,
+        { method: "DELETE" }
+      );
+      return res.ok;
+    } catch {
+      setAuthError("Could not disconnect Google Calendar.");
+      return false;
+    }
+  }, []);
 
   return {
     connectGoogleCalendar,

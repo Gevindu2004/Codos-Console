@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     TWILIO_PHONE_NUMBER: Optional[str] = None
     TWILIO_VERIFY_SERVICE_SID: Optional[str] = None
 
+    # CallColleague.ai Google Calendar OAuth (per-tenant calendar connect)
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    GOOGLE_OAUTH_REDIRECT_URI: str = "http://localhost:8000/api/v1/integrations/google/callback"
+    FRONTEND_URL: str = "http://localhost:3000"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

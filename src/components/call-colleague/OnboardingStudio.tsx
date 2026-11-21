@@ -73,7 +73,6 @@ import {
 } from "./ui";
 import {
   useVapiWeb,
-  useGoogleAuth,
   api,
   ProvisioningStepResult,
   speakWithPersona,
@@ -1314,8 +1313,6 @@ export const Step6CalendarAndPhone: React.FC = () => {
   const state = useOnboardingStore();
   const { updateUser, login } = useAdminStore();
   const { navigateTo } = useCallColleagueNavigation();
-  const { connectGoogleCalendar, disconnectGoogleCalendar, isConnecting } =
-    useGoogleAuth();
 
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [provisionError, setProvisionError] = useState<string | null>(null);
@@ -1450,28 +1447,12 @@ export const Step6CalendarAndPhone: React.FC = () => {
               <p className="text-xs text-slate-400 mt-1">
                 {state.googleCalendarConnected
                   ? `Synced with ${state.calendarEmail} — AI checks conflicts before booking.`
-                  : "Prevent double-bookings by allowing your AI to read free/busy slots and create events."}
+                  : "After you deploy, open Agent Settings and click Connect Google Calendar so your AI can read free/busy slots and create events."}
               </p>
             </div>
           </div>
 
-          {state.googleCalendarConnected ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={disconnectGoogleCalendar}
-            >
-              Disconnect
-            </Button>
-          ) : (
-            <Button
-              variant="secondary"
-              onClick={connectGoogleCalendar}
-              isLoading={isConnecting}
-            >
-              Connect Google Calendar
-            </Button>
-          )}
+          <Badge variant="default">Connect after deploy</Badge>
         </div>
 
         <div className="mb-6">
