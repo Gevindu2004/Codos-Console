@@ -124,14 +124,14 @@ export const INDUSTRY_TEMPLATES: Record<IndustryType, IndustryTemplateData> = {
       {
         id: "dept_salon_1",
         name: "Salon Front Desk",
-        phoneNumber: "+1 (555) 392-8810",
+        phoneNumber: "+1 (415) 392-8810",
         description:
           "Transfer when caller asks for bridal group bookings or front desk coordinator.",
       },
       {
         id: "dept_salon_2",
         name: "Owner / VIP Escalation",
-        phoneNumber: "+1 (555) 392-8899",
+        phoneNumber: "+1 (415) 392-8899",
         description:
           "Transfer for urgent complaints or VIP stylist requests.",
       },
@@ -197,14 +197,14 @@ export const INDUSTRY_TEMPLATES: Record<IndustryType, IndustryTemplateData> = {
       {
         id: "dept_clinic_1",
         name: "Clinical Triage Nurse",
-        phoneNumber: "+1 (555) 842-1011",
+        phoneNumber: "+1 (415) 842-1011",
         description:
           "Transfer immediately if caller reports severe bleeding, trauma, or post-op fever.",
       },
       {
         id: "dept_clinic_2",
         name: "Billing & Dental Insurance",
-        phoneNumber: "+1 (555) 842-1022",
+        phoneNumber: "+1 (415) 842-1022",
         description:
           "Transfer for insurance pre-authorizations and copay inquiries.",
       },
@@ -255,7 +255,7 @@ export const INDUSTRY_TEMPLATES: Record<IndustryType, IndustryTemplateData> = {
       {
         id: "dept_travel_1",
         name: "24/7 Emergency Flight Rebooking",
-        phoneNumber: "+1 (555) 710-4491",
+        phoneNumber: "+1 (415) 710-4491",
         description: "Transfer when traveler has a delayed or cancelled flight.",
       },
     ],
@@ -289,7 +289,7 @@ export const INDUSTRY_TEMPLATES: Record<IndustryType, IndustryTemplateData> = {
       {
         id: "dept_legal_1",
         name: "Senior Intake Paralegal",
-        phoneNumber: "+1 (555) 601-3310",
+        phoneNumber: "+1 (415) 601-3310",
         description:
           "Transfer for urgent court filing deadlines or existing client case updates.",
       },
@@ -323,7 +323,7 @@ export const INDUSTRY_TEMPLATES: Record<IndustryType, IndustryTemplateData> = {
       {
         id: "dept_custom_1",
         name: "Main Reception Desk",
-        phoneNumber: "+1 (555) 100-2000",
+        phoneNumber: "+1 (415) 601-2000",
         description: "Transfer when caller requests a live human representative.",
       },
     ],
@@ -397,11 +397,51 @@ export const CARRIER_FORWARDING_CODES: CarrierForwardingGuide[] = [
     cancelForwarding: "#21#",
   },
   {
+    id: "optus_au",
+    name: "Optus",
+    country: "Australia",
+    forwardAll: "*21*{AI_NUMBER}#",
+    forwardBusyNoAnswer: "*61*{AI_NUMBER}#",
+    cancelForwarding: "##002#",
+  },
+  {
+    id: "vodafone_au",
+    name: "Vodafone AU",
+    country: "Australia",
+    forwardAll: "**21*{AI_NUMBER}#",
+    forwardBusyNoAnswer: "**61*{AI_NUMBER}#",
+    cancelForwarding: "##002#",
+  },
+  {
     id: "vodafone_uk",
     name: "Vodafone UK",
     country: "United Kingdom",
     forwardAll: "**21*{AI_NUMBER}#",
     forwardBusyNoAnswer: "**61*{AI_NUMBER}#",
+    cancelForwarding: "##002#",
+  },
+  {
+    id: "ee_uk",
+    name: "EE",
+    country: "United Kingdom",
+    forwardAll: "**21*{AI_NUMBER}#",
+    forwardBusyNoAnswer: "**61*{AI_NUMBER}#",
+    cancelForwarding: "##002#",
+  },
+  {
+    id: "o2_uk",
+    name: "O2 UK",
+    country: "United Kingdom",
+    forwardAll: "**21*{AI_NUMBER}#",
+    forwardBusyNoAnswer: "**61*{AI_NUMBER}#",
+    cancelForwarding: "##002#",
+  },
+  {
+    id: "three_uk",
+    name: "Three UK",
+    country: "United Kingdom",
+    forwardAll: "*21*{AI_NUMBER}#",
+    forwardBusyNoAnswer: "*61*{AI_NUMBER}#",
     cancelForwarding: "##002#",
   },
 ];

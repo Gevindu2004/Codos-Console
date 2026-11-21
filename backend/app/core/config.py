@@ -41,6 +41,25 @@ class Settings(BaseSettings):
     # CORS Origins (Next.js frontend)
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
+    # CallColleague.ai (Vapi Voice AI + Telephony)
+    VAPI_PRIVATE_API_KEY: Optional[str] = None
+    VAPI_PUBLIC_KEY: Optional[str] = None
+    VAPI_WEBHOOK_SECRET: Optional[str] = "whsec_call_colleague_dev_secret"
+    APP_PUBLIC_URL: str = "http://localhost:8000"
+    TWILIO_ACCOUNT_SID: Optional[str] = None
+    TWILIO_AUTH_TOKEN: Optional[str] = None
+    TWILIO_PHONE_NUMBER: Optional[str] = None
+    TWILIO_VERIFY_SERVICE_SID: Optional[str] = None
+    TWILIO_BUNDLE_SID_GB: Optional[str] = None
+    TWILIO_BUNDLE_SID_AU: Optional[str] = None
+    TWILIO_DRY_RUN: bool = False
+
+    # CallColleague.ai Google Calendar OAuth (per-tenant calendar connect)
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    GOOGLE_OAUTH_REDIRECT_URI: str = "http://localhost:8000/api/v1/integrations/google/callback"
+    FRONTEND_URL: str = "http://localhost:3000"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

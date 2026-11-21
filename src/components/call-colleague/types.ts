@@ -7,6 +7,27 @@ export type TelephonySetupType =
   | "call_forwarding"
   | "sip_pbx_trunk";
 
+export type PhoneCountry = "US" | "GB" | "AU";
+export type PhoneNumberType = "local" | "mobile" | "tollfree";
+
+export interface AvailablePhoneNumber {
+  phoneNumber: string;
+  friendlyName: string;
+  locality: string;
+  region: string;
+  country: PhoneCountry;
+  numberType: PhoneNumberType;
+  monthlyPrice: string;
+  requiresBundle: boolean;
+  capabilities?: { voice?: boolean; sms?: boolean };
+}
+
+export interface ByoTwilioConfig {
+  accountSid: string;
+  authToken: string;
+  phoneNumber: string;
+}
+
 export interface OperatingHour {
   day: string;
   openTime: string;
@@ -78,6 +99,9 @@ export interface AgentProvisionPayload {
   isNumberVerified: boolean;
   sipConfig: SipTrunkConfig;
   planTier: PlanTier;
+  phoneCountry?: PhoneCountry;
+  selectedPhoneNumber?: string;
+  byoTwilio?: ByoTwilioConfig;
 }
 
 export interface ProvisionResponse {
@@ -97,6 +121,7 @@ export interface CallLogItem {
   sentiment: "positive" | "neutral" | "urgent";
   summary: string;
   serviceRequested?: string;
+  recordingUrl?: string;
   transcript: { role: "agent" | "user"; text: string }[];
 }
 
@@ -115,6 +140,8 @@ export interface AppointmentItem {
 
 export interface AdminUser {
   id: string;
+  googleCalendarConnected?: boolean;
+  calendarEmail?: string;
   email: string;
   businessName: string;
   industry: IndustryType;
