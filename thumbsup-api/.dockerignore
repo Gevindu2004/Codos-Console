@@ -1,0 +1,18 @@
+# Never put secrets or local data into the server image
+.env
+.env.*
+!.env.example
+*service-account*.json
+storage/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+deploy/
+*.db
+.env.local
+secrets.local.json
+*.old
+*.tgz
