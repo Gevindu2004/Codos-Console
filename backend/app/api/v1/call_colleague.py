@@ -25,7 +25,7 @@ from app.models.call_colleague import (
     CcTenant,
     CcVoiceApiKey,
 )
-from app.services import booking_tools, google_calendar
+from app.services import booking_tools, google_calendar, twilio_telephony
 from app.services.vapi_service import (
     bind_vapi_phone_number,
     build_vapi_assistant_dto,
@@ -60,6 +60,8 @@ def _serialize_tenant(t: CcTenant) -> dict[str, Any]:
         "voicePersona": t.voice_persona,
         "vapiAssistantId": t.vapi_assistant_id or t.id,
         "vapiPhoneNumberId": t.vapi_phone_number_id,
+        "twilioPhoneSid": t.twilio_phone_sid,
+        "phoneCountry": t.phone_country or "US",
         "telephonySetupType": t.telephony_setup_type,
         "forwardingNumber": t.forwarding_number or "",
         "selectedCarrierId": t.selected_carrier_id or "dialog_sl",
@@ -206,12 +208,19 @@ async def provision_agent(request: Request, db: AsyncSession = Depends(get_db)):
     # Phone number or SIP binding
     random_digits = random.randint(1000, 9999)
     telephony_type = payload.get("telephonySetupType", "new_dedicated_number")
+    selected_phone = (payload.get("selectedPhoneNumber") or "").strip()
+    phone_country = (payload.get("phoneCountry") or "US").upper()
+    byo_twilio = payload.get("byoTwilio") or {}
     assigned_number = (
-        f"+1 (888) 412-{random_digits}"
-        if telephony_type == "new_dedicated_number"
-        else f"+1 (800) 945-{random_digits}"
+        selected_phone
+        or (
+            f"+1 (888) 412-{random_digits}"
+            if telephony_type == "new_dedicated_number"
+            else f"+1 (800) 945-{random_digits}"
+        )
     )
     vapi_phone_id: Optional[str] = None
+    twilio_phone_sid: Optional[str] = None
     sip_cfg = payload.get("sipConfig") or {"sipUri": "", "authUsername": "", "transport": "TLS"}
     sip_endpoint_uri = (
         sip_cfg.get("sipUri") or f"sip:{agent_id}@sip.vapi.ai;transport=tls"
@@ -219,12 +228,49 @@ async def provision_agent(request: Request, db: AsyncSession = Depends(get_db)):
         else None
     )
 
-    if telephony_type == "new_dedicated_number":
-        phone_data = await bind_vapi_phone_number(agent_id, business_name)
-        if phone_data:
-            vapi_phone_id = phone_data.get("id")
-            if phone_data.get("number"):
-                assigned_number = phone_data["number"]
+    if telephony_type in ("new_dedicated_number", "call_forwarding"):
+        byo_sid = (byo_twilio.get("accountSid") or "").strip()
+        byo_token = (byo_twilio.get("authToken") or "").strip()
+        byo_num = (byo_twilio.get("phoneNumber") or "").strip()
+
+        if byo_sid and byo_token and byo_num:
+            assigned_number = byo_num
+            phone_data = await bind_vapi_phone_number(
+                agent_id,
+                business_name,
+                phone_number=byo_num,
+                twilio_sid=byo_sid,
+                twilio_token=byo_token,
+            )
+            if phone_data:
+                vapi_phone_id = phone_data.get("id")
+        elif selected_phone:
+            try:
+                purchased = await twilio_telephony.purchase_twilio_number(
+                    selected_phone, phone_country, business_name
+                )
+            except RuntimeError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            twilio_phone_sid = purchased.get("sid")
+            assigned_number = purchased["phoneNumber"]
+            if purchased["mode"] == "twilio":
+                phone_data = await bind_vapi_phone_number(
+                    agent_id, business_name, phone_number=assigned_number
+                )
+                if phone_data:
+                    vapi_phone_id = phone_data.get("id")
+            else:
+                phone_data = await bind_vapi_phone_number(agent_id, business_name)
+                if phone_data:
+                    vapi_phone_id = phone_data.get("id")
+                    if phone_data.get("number"):
+                        assigned_number = phone_data["number"]
+        else:
+            phone_data = await bind_vapi_phone_number(agent_id, business_name)
+            if phone_data:
+                vapi_phone_id = phone_data.get("id")
+                if phone_data.get("number"):
+                    assigned_number = phone_data["number"]
 
     tenant = CcTenant(
         id=agent_id,
@@ -239,6 +285,8 @@ async def provision_agent(request: Request, db: AsyncSession = Depends(get_db)):
         vapi_assistant_id=agent_id,
         vapi_phone_number_id=vapi_phone_id,
         virtual_phone_number=assigned_number,
+        twilio_phone_sid=twilio_phone_sid,
+        phone_country=phone_country,
         telephony_setup_type=telephony_type,
         forwarding_number=payload.get("forwardingNumber", ""),
         selected_carrier_id=payload.get("selectedCarrierId", "dialog_sl"),
@@ -423,6 +471,9 @@ async def delete_agent(agent_id: str, db: AsyncSession = Depends(get_db)):
     tenant = await _find_tenant(db, agent_id=agent_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Agent not found")
+
+    if tenant.twilio_phone_sid:
+        await twilio_telephony.release_twilio_number(tenant.twilio_phone_sid)
 
     if tenant.vapi_assistant_id:
         await delete_vapi_assistant(tenant.vapi_assistant_id)
@@ -878,6 +929,63 @@ async def send_appointment_reminder(
                 delivery_mode = "twilio"
 
     return {"sent": True, "deliveryMode": delivery_mode, "recipient": apt.client_phone}
+
+
+@router.get("/telephony/numbers/search")
+async def search_telephony_numbers(
+    country: str = Query(default="US"),
+    areaCode: Optional[str] = Query(default=None),
+    numberType: str = Query(default="local"),
+):
+    return await twilio_telephony.search_available_numbers(
+        country=country, area_code=areaCode, number_type=numberType
+    )
+
+
+class PurchaseNumberRequest(BaseModel):
+    agentId: str
+    phoneNumber: str
+    country: str = "US"
+
+
+@router.post("/telephony/numbers/purchase")
+async def purchase_telephony_number(
+    body: PurchaseNumberRequest, db: AsyncSession = Depends(get_db)
+):
+    tenant = await _find_tenant(db, agent_id=body.agentId)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    try:
+        purchased = await twilio_telephony.purchase_twilio_number(
+            body.phoneNumber, body.country, tenant.business_name
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    phone_data = await bind_vapi_phone_number(
+        tenant.vapi_assistant_id or tenant.id,
+        tenant.business_name,
+        phone_number=(purchased["phoneNumber"] if purchased["mode"] == "twilio" else None),
+    )
+
+    tenant.virtual_phone_number = (
+        purchased["phoneNumber"]
+        if purchased["mode"] == "twilio"
+        else (phone_data.get("number") if phone_data and phone_data.get("number") else purchased["phoneNumber"])
+    )
+    tenant.twilio_phone_sid = purchased.get("sid")
+    tenant.vapi_phone_number_id = phone_data.get("id") if phone_data else tenant.vapi_phone_number_id
+    tenant.phone_country = body.country.upper()
+    await db.commit()
+
+    return {
+        "purchased": True,
+        "mode": purchased["mode"],
+        "phoneNumber": tenant.virtual_phone_number,
+        "twilioPhoneSid": tenant.twilio_phone_sid,
+        "vapiPhoneNumberId": tenant.vapi_phone_number_id,
+    }
 
 
 class OtpRequest(BaseModel):

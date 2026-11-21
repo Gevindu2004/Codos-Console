@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: Optional[str] = None
     TWILIO_PHONE_NUMBER: Optional[str] = None
     TWILIO_VERIFY_SERVICE_SID: Optional[str] = None
+    TWILIO_BUNDLE_SID_GB: Optional[str] = None
+    TWILIO_BUNDLE_SID_AU: Optional[str] = None
+    TWILIO_DRY_RUN: bool = False
 
     # CallColleague.ai Google Calendar OAuth (per-tenant calendar connect)
     GOOGLE_CLIENT_ID: Optional[str] = None

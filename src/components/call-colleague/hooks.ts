@@ -425,14 +425,38 @@ export const api = {
 
     if (!response.ok) {
       const err = (await response.json().catch(() => ({}))) as {
+        detail?: string;
         error?: string;
       };
-      throw new Error(err.error || "Failed to provision Vapi agent");
+      throw new Error(err.detail || err.error || "Failed to provision Vapi agent");
     }
 
     onStepUpdate?.("phone_binding");
     onStepUpdate?.("smoke_test");
     return (await response.json()) as ProvisionResponse;
+  },
+
+  searchAvailableNumbers: async (
+    country: string,
+    areaCode: string,
+    numberType: string
+  ): Promise<{
+    mode: "twilio" | "sandbox";
+    country: string;
+    numberType: string;
+    requiresBundle: boolean;
+    numbers: import("./types").AvailablePhoneNumber[];
+    error?: string;
+  }> => {
+    const params = new URLSearchParams({ country, numberType });
+    if (areaCode.trim()) params.set("areaCode", areaCode.trim());
+    const response = await fetch(
+      `${API_BASE_URL}/telephony/numbers/search?${params.toString()}`
+    );
+    if (!response.ok) {
+      throw new Error("Failed to search available numbers");
+    }
+    return response.json();
   },
 
   triggerOtpVerification: async (

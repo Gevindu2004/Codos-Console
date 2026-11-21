@@ -10,6 +10,7 @@ import {
   IndustryType,
   KnowledgeFAQ,
   OperatingHour,
+  PhoneCountry,
   PlanTier,
   ServiceItem,
   SipTrunkConfig,
@@ -46,6 +47,8 @@ export interface OnboardingStoreState {
   isNumberVerified: boolean;
   sipConfig: SipTrunkConfig;
   planTier: PlanTier;
+  phoneCountry: PhoneCountry;
+  selectedPhoneNumber: string;
   provisionedAgentId: string | null;
   virtualPhoneNumber: string | null;
 
@@ -74,6 +77,8 @@ export interface OnboardingStoreState {
   setNumberVerified: (verified: boolean) => void;
   setSipConfig: (config: Partial<SipTrunkConfig>) => void;
   setPlanTier: (tier: PlanTier) => void;
+  setPhoneCountry: (country: PhoneCountry) => void;
+  setSelectedPhoneNumber: (num: string) => void;
   setProvisionedResult: (agentId: string, phoneNumber: string) => void;
   resetWizard: () => void;
 }
@@ -197,6 +202,8 @@ export const CallColleagueProvider: React.FC<{
     transport: "TLS",
   });
   const [planTier, setPlanTier] = useState<PlanTier>("growth");
+  const [phoneCountry, setPhoneCountry] = useState<PhoneCountry>("US");
+  const [selectedPhoneNumber, setSelectedPhoneNumber] = useState<string>("");
   const [provisionedAgentId, setProvisionedAgentId] = useState<string | null>(
     null
   );
@@ -319,6 +326,8 @@ export const CallColleagueProvider: React.FC<{
     isNumberVerified,
     sipConfig,
     planTier,
+    phoneCountry,
+    selectedPhoneNumber,
     provisionedAgentId,
     virtualPhoneNumber,
 
@@ -377,6 +386,8 @@ export const CallColleagueProvider: React.FC<{
     setSipConfig: (config) =>
       setSipConfigState((prev) => ({ ...prev, ...config })),
     setPlanTier: (tier) => setPlanTier(tier),
+    setPhoneCountry: (country) => setPhoneCountry(country),
+    setSelectedPhoneNumber: (num) => setSelectedPhoneNumber(num),
     setProvisionedResult: (agentId, phoneNumber) => {
       setProvisionedAgentId(agentId);
       setVirtualPhoneNumber(phoneNumber);
@@ -394,6 +405,8 @@ export const CallColleagueProvider: React.FC<{
       setTelephonySetupType("new_dedicated_number");
       setForwardingNumber("");
       setIsNumberVerified(false);
+      setPhoneCountry("US");
+      setSelectedPhoneNumber("");
       setProvisionedAgentId(null);
       setVirtualPhoneNumber(null);
     },

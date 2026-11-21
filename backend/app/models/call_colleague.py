@@ -36,6 +36,8 @@ class CcTenant(Base):
     vapi_assistant_id: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     vapi_phone_number_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     virtual_phone_number: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    twilio_phone_sid: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    phone_country: Mapped[str | None] = mapped_column(String(8), nullable=True, default="US")
     telephony_setup_type: Mapped[str] = mapped_column(String(40), nullable=False, default="new_dedicated_number")
     forwarding_number: Mapped[str | None] = mapped_column(String(40), nullable=True, default="")
     selected_carrier_id: Mapped[str | None] = mapped_column(String(64), nullable=True, default="dialog_sl")

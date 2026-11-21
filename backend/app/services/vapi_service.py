@@ -332,13 +332,17 @@ async def delete_vapi_assistant(assistant_id: str) -> None:
 
 
 async def bind_vapi_phone_number(
-    assistant_id: str, business_name: str
+    assistant_id: str,
+    business_name: str,
+    phone_number: Optional[str] = None,
+    twilio_sid: Optional[str] = None,
+    twilio_token: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """Bind an inbound phone number to the given Vapi assistant.
 
-    Uses Twilio BYO number when Twilio credentials are present; otherwise reuses
-    an existing Vapi phone number on the account (free tier allows 1) or creates
-    a free Vapi number.
+    Uses Twilio BYO/purchased number when Twilio credentials and number are
+    present; otherwise reuses an existing Vapi phone number on the account
+    (free tier allows 1) or creates a free Vapi number.
     """
     if not settings.VAPI_PRIVATE_API_KEY:
         return None
@@ -348,11 +352,11 @@ async def bind_vapi_phone_number(
         "Content-Type": "application/json",
     }
 
-    if (
-        settings.TWILIO_ACCOUNT_SID
-        and settings.TWILIO_AUTH_TOKEN
-        and settings.TWILIO_PHONE_NUMBER
-    ):
+    sid = twilio_sid or settings.TWILIO_ACCOUNT_SID
+    token = twilio_token or settings.TWILIO_AUTH_TOKEN
+    num = phone_number or settings.TWILIO_PHONE_NUMBER
+
+    if sid and token and num:
         try:
             async with httpx.AsyncClient(timeout=20.0) as client:
                 res = await client.post(
@@ -360,9 +364,9 @@ async def bind_vapi_phone_number(
                     headers=headers,
                     json={
                         "provider": "twilio",
-                        "number": settings.TWILIO_PHONE_NUMBER,
-                        "twilioAccountSid": settings.TWILIO_ACCOUNT_SID,
-                        "twilioAuthToken": settings.TWILIO_AUTH_TOKEN,
+                        "number": num,
+                        "twilioAccountSid": sid,
+                        "twilioAuthToken": token,
                         "assistantId": assistant_id,
                         "name": f"{business_name} Inbound Line"[:40],
                     },
